@@ -1,13 +1,66 @@
 {
   "rules": {
-    ".read": false, ".write": false,
-    "users": { "$uid": { ".read": "$uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'ADMIN'", ".write": "root.child('users').child(auth.uid).child('role').val() === 'ADMIN'" } },
-    "stores": { "$storeId": { ".read": "auth != null && (root.child('users').child(auth.uid).child('storeId').val() === $storeId || root.child('users').child(auth.uid).child('role').val() === 'ADMIN')", ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'" } },
-    "sales": { "$saleId": { ".read": "auth != null && data.child('storeId').val() === root.child('users').child(auth.uid).child('storeId').val()", ".write": "auth != null && (!data.exists() || data.val() === newData.val()) && newData.child('storeId').val() === root.child('users').child(auth.uid).child('storeId').val()" } },
-    "products": { "$id": { ".read": "auth != null", ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'CASHIER'" } },
-    "ingredients": { "$id": { ".read": "auth != null", ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'CASHIER'" } },
-    "inventoryMovements": { "$id": { ".read": "auth != null", ".write": "auth != null && !data.exists()" } },
-    "ingredientMovements": { "$id": { ".read": "auth != null", ".write": "auth != null && !data.exists()" } },
-    "auditLogs": { "$id": { ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'", ".write": "auth != null && !data.exists()" } }
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'ADMIN')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'",
+        ".validate": "newData.hasChildren(['userId', 'name', 'email', 'role', 'storeId', 'active'])"
+      }
+    },
+
+    "stores": {
+      "$storeId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && (root.child('users').child(auth.uid).child('storeId').val() === $storeId || root.child('users').child(auth.uid).child('role').val() === 'ADMIN')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'",
+        ".validate": "newData.hasChildren(['storeId', 'storeCode', 'storeName', 'active'])"
+      }
+    },
+
+    "products": {
+      "$productId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && (root.child('users').child(auth.uid).child('role').val() === 'ADMIN' || root.child('users').child(auth.uid).child('role').val() === 'MANAGER' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'INVENTORY_USER')",
+        ".validate": "newData.hasChildren(['id', 'sku', 'productName', 'retailPrice', 'active', 'inventoryMode'])"
+      }
+    },
+
+    "ingredients": {
+      "$ingredientId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && (root.child('users').child(auth.uid).child('role').val() === 'ADMIN' || root.child('users').child(auth.uid).child('role').val() === 'MANAGER' || root.child('users').child(auth.uid).child('role').val() === 'SUPERVISOR' || root.child('users').child(auth.uid).child('role').val() === 'INVENTORY_USER')",
+        ".validate": "newData.hasChildren(['id', 'ingredientSku', 'ingredientName', 'unitOfMeasure', 'active'])"
+      }
+    },
+
+    "inventoryMovements": {
+      "$movementId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && !data.exists()"
+      }
+    },
+
+    "ingredientMovements": {
+      "$movementId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && !data.exists()"
+      }
+    },
+
+    "sales": {
+      "$saleId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && data.child('storeId').val() === root.child('users').child(auth.uid).child('storeId').val()",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && newData.child('storeId').val() === root.child('users').child(auth.uid).child('storeId').val() && (!data.exists() || data.val() === newData.val())"
+      }
+    },
+
+    "auditLogs": {
+      "$auditId": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && !data.exists()"
+      }
+    }
   }
 }
