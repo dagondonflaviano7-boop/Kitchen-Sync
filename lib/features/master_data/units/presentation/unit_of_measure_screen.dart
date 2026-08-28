@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kitchen_sync/data/repositories/unit_of_measure_repository.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
+import 'package:kitchen_sync/features/master_data/units/presentation/unit_of_measure_form_screen.dart';
 
 String _formatFactor(double value) {
   if (value == value.roundToDouble()) {
@@ -95,6 +96,38 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
     }).toList(growable: false);
   }
 
+  Future<void> _openUnitForm({
+    UnitOfMeasure? unit,
+  }) async {
+    final bool? saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => UnitOfMeasureFormScreen(
+          unit: unit,
+        ),
+      ),
+    );
+
+    if (saved != true || !mounted) {
+      return;
+    }
+
+    await _loadUnits();
+
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          unit == null
+              ? 'Unit created successfully.'
+              : 'Unit updated successfully.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleActive(
     UnitOfMeasure unit,
   ) async {
@@ -123,15 +156,7 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Add Unit form is the next checkpoint.',
-              ),
-            ),
-          );
-        },
+        onPressed: _loading ? null : () => _openUnitForm(),
         icon: const Icon(Icons.add),
         label: const Text('Add Unit'),
       ),
@@ -302,6 +327,9 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
         if (constraints.maxWidth >= 760) {
           return _UnitTable(
             units: units,
+            onEdit: (unit) => _openUnitForm(
+              unit: unit,
+            ),
             onToggleActive: _toggleActive,
           );
         }
@@ -320,6 +348,9 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
 
             return _UnitCard(
               unit: unit,
+              onEdit: () => _openUnitForm(
+                unit: unit,
+              ),
               onToggleActive: () => _toggleActive(unit),
             );
           },
@@ -331,10 +362,12 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
 
 class _UnitCard extends StatelessWidget {
   final UnitOfMeasure unit;
+  final VoidCallback onEdit;
   final VoidCallback onToggleActive;
 
   const _UnitCard({
     required this.unit,
+    required this.onEdit,
     required this.onToggleActive,
   });
 
@@ -384,15 +417,39 @@ class _UnitCard extends StatelessWidget {
         ),
         trailing: PopupMenuButton<String>(
           onSelected: (value) {
+            if (value == 'edit') {
+              onEdit();
+            }
+
             if (value == 'toggle') {
               onToggleActive();
             }
           },
           itemBuilder: (_) => [
+            const PopupMenuItem<String>(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_outlined),
+                  SizedBox(width: 12),
+                  Text('Edit'),
+                ],
+              ),
+            ),
             PopupMenuItem<String>(
               value: 'toggle',
-              child: Text(
-                unit.active ? 'Deactivate' : 'Activate',
+              child: Row(
+                children: [
+                  Icon(
+                    unit.active
+                        ? Icons.toggle_off_outlined
+                        : Icons.toggle_on_outlined,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    unit.active ? 'Deactivate' : 'Activate',
+                  ),
+                ],
               ),
             ),
           ],
@@ -404,10 +461,12 @@ class _UnitCard extends StatelessWidget {
 
 class _UnitTable extends StatelessWidget {
   final List<UnitOfMeasure> units;
+  final Future<void> Function(UnitOfMeasure) onEdit;
   final Future<void> Function(UnitOfMeasure) onToggleActive;
 
   const _UnitTable({
     required this.units,
+    required this.onEdit,
     required this.onToggleActive,
   });
 
@@ -457,14 +516,27 @@ class _UnitTable extends StatelessWidget {
                     ),
                   ),
                   DataCell(
-                    IconButton(
-                      tooltip: unit.active ? 'Deactivate' : 'Activate',
-                      onPressed: () => onToggleActive(unit),
-                      icon: Icon(
-                        unit.active ? Icons.toggle_on : Icons.toggle_off,
-                        color:
-                            unit.active ? const Color(0xFF2E6B4F) : Colors.grey,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Edit',
+                          onPressed: () => onEdit(unit),
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: unit.active ? 'Deactivate' : 'Activate',
+                          onPressed: () => onToggleActive(unit),
+                          icon: Icon(
+                            unit.active ? Icons.toggle_on : Icons.toggle_off,
+                            color: unit.active
+                                ? const Color(0xFF2E6B4F)
+                                : Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
