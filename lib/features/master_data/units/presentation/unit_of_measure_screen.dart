@@ -1,0 +1,478 @@
+import 'package:flutter/material.dart';
+import 'package:kitchen_sync/data/repositories/unit_of_measure_repository.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
+
+String _formatFactor(double value) {
+  if (value == value.roundToDouble()) {
+    return value.toInt().toString();
+  }
+
+  return value.toString();
+}
+
+enum UnitStatusFilter {
+  all,
+  active,
+  inactive,
+}
+
+class UnitOfMeasureScreen extends StatefulWidget {
+  const UnitOfMeasureScreen({super.key});
+
+  @override
+  State<UnitOfMeasureScreen> createState() => _UnitOfMeasureScreenState();
+}
+
+class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
+  final UnitOfMeasureRepository _repository = const UnitOfMeasureRepository();
+
+  final TextEditingController _searchController = TextEditingController();
+
+  List<UnitOfMeasure> _units = <UnitOfMeasure>[];
+  UnitStatusFilter _statusFilter = UnitStatusFilter.all;
+  UnitType? _unitTypeFilter;
+
+  bool _loading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnits();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUnits() async {
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _repository.seedStandardUnits();
+
+      final List<UnitOfMeasure> units = await _repository.searchUnits(
+        _searchController.text,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _units = units;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _loading = false;
+        _errorMessage = error.toString();
+      });
+    }
+  }
+
+  List<UnitOfMeasure> get _filteredUnits {
+    return _units.where((unit) {
+      final bool statusMatches = switch (_statusFilter) {
+        UnitStatusFilter.all => true,
+        UnitStatusFilter.active => unit.active,
+        UnitStatusFilter.inactive => !unit.active,
+      };
+
+      final bool typeMatches =
+          _unitTypeFilter == null || unit.unitType == _unitTypeFilter;
+
+      return statusMatches && typeMatches;
+    }).toList(growable: false);
+  }
+
+  Future<void> _toggleActive(
+    UnitOfMeasure unit,
+  ) async {
+    await _repository.setUnitActive(
+      unit.id,
+      !unit.active,
+    );
+
+    await _loadUnits();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<UnitOfMeasure> visibleUnits = _filteredUnits;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F6F1),
+      appBar: AppBar(
+        title: const Text('Units of Measure'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _loadUnits,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Add Unit form is the next checkpoint.',
+              ),
+            ),
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Add Unit'),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildFilters(),
+            Expanded(
+              child: _buildContent(visibleUnits),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilters() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        14,
+      ),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search unit code or name',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        _searchController.clear();
+                        _loadUnits();
+                      },
+                      icon: const Icon(Icons.clear),
+                    ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onChanged: (_) {
+              setState(() {});
+            },
+            onSubmitted: (_) => _loadUnits(),
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                SegmentedButton<UnitStatusFilter>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment<UnitStatusFilter>(
+                      value: UnitStatusFilter.all,
+                      label: Text('All'),
+                    ),
+                    ButtonSegment<UnitStatusFilter>(
+                      value: UnitStatusFilter.active,
+                      label: Text('Active'),
+                    ),
+                    ButtonSegment<UnitStatusFilter>(
+                      value: UnitStatusFilter.inactive,
+                      label: Text('Inactive'),
+                    ),
+                  ],
+                  selected: <UnitStatusFilter>{
+                    _statusFilter,
+                  },
+                  onSelectionChanged: (selection) {
+                    setState(() {
+                      _statusFilter = selection.first;
+                    });
+                  },
+                ),
+                const SizedBox(width: 12),
+                DropdownButton<UnitType?>(
+                  value: _unitTypeFilter,
+                  hint: const Text('All types'),
+                  items: const [
+                    DropdownMenuItem<UnitType?>(
+                      value: null,
+                      child: Text('All types'),
+                    ),
+                    DropdownMenuItem<UnitType?>(
+                      value: UnitType.count,
+                      child: Text('Count'),
+                    ),
+                    DropdownMenuItem<UnitType?>(
+                      value: UnitType.weight,
+                      child: Text('Weight'),
+                    ),
+                    DropdownMenuItem<UnitType?>(
+                      value: UnitType.volume,
+                      child: Text('Volume'),
+                    ),
+                    DropdownMenuItem<UnitType?>(
+                      value: UnitType.packaging,
+                      child: Text('Packaging'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _unitTypeFilter = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(
+    List<UnitOfMeasure> units,
+  ) {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Colors.red,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _loadUnits,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (units.isEmpty) {
+      return const Center(
+        child: Text('No units found.'),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 760) {
+          return _UnitTable(
+            units: units,
+            onToggleActive: _toggleActive,
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            88,
+          ),
+          itemCount: units.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final UnitOfMeasure unit = units[index];
+
+            return _UnitCard(
+              unit: unit,
+              onToggleActive: () => _toggleActive(unit),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _UnitCard extends StatelessWidget {
+  final UnitOfMeasure unit;
+  final VoidCallback onToggleActive;
+
+  const _UnitCard({
+    required this.unit,
+    required this.onToggleActive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(
+          color: Color(0xFFDBE5DD),
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(
+          16,
+          10,
+          8,
+          10,
+        ),
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFFE8F1EC),
+          child: Text(
+            unit.code.substring(0, 1),
+            style: const TextStyle(
+              color: Color(0xFF2E6B4F),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(
+          '${unit.code} • ${unit.name}',
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Text(
+            '${unitTypeToStorage(unit.unitType)}'
+            '${unit.baseUnitCode == null ? '' : ' • '
+                '${_formatFactor(unit.conversionFactor)} '
+                '${unit.baseUnitCode}'}'
+            ' • ${unit.allowDecimal ? 'Decimal' : 'Whole'}',
+          ),
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'toggle') {
+              onToggleActive();
+            }
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem<String>(
+              value: 'toggle',
+              child: Text(
+                unit.active ? 'Deactivate' : 'Activate',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UnitTable extends StatelessWidget {
+  final List<UnitOfMeasure> units;
+  final Future<void> Function(UnitOfMeasure) onToggleActive;
+
+  const _UnitTable({
+    required this.units,
+    required this.onToggleActive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Card(
+        elevation: 0,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columns: const [
+              DataColumn(label: Text('Code')),
+              DataColumn(label: Text('Name')),
+              DataColumn(label: Text('Type')),
+              DataColumn(label: Text('Base')),
+              DataColumn(label: Text('Factor')),
+              DataColumn(label: Text('Quantity')),
+              DataColumn(label: Text('Status')),
+              DataColumn(label: Text('Actions')),
+            ],
+            rows: units.map((unit) {
+              return DataRow(
+                cells: [
+                  DataCell(Text(unit.code)),
+                  DataCell(Text(unit.name)),
+                  DataCell(
+                    Text(
+                      unitTypeToStorage(unit.unitType),
+                    ),
+                  ),
+                  DataCell(
+                    Text(unit.baseUnitCode ?? '—'),
+                  ),
+                  DataCell(
+                    Text(_formatFactor(unit.conversionFactor)),
+                  ),
+                  DataCell(
+                    Text(
+                      unit.allowDecimal ? 'Decimal' : 'Whole',
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      unit.active ? 'Active' : 'Inactive',
+                    ),
+                  ),
+                  DataCell(
+                    IconButton(
+                      tooltip: unit.active ? 'Deactivate' : 'Activate',
+                      onPressed: () => onToggleActive(unit),
+                      icon: Icon(
+                        unit.active ? Icons.toggle_on : Icons.toggle_off,
+                        color:
+                            unit.active ? const Color(0xFF2E6B4F) : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(growable: false),
+          ),
+        ),
+      ),
+    );
+  }
+}

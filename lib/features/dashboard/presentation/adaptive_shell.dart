@@ -4,6 +4,7 @@ import 'package:kitchen_sync/core/connectivity/connectivity_service.dart';
 import 'package:kitchen_sync/core/constants/app_constants.dart';
 import 'package:kitchen_sync/core/permissions/role.dart';
 import 'package:kitchen_sync/data/repositories/local_session_repository.dart';
+import 'package:kitchen_sync/features/master_data/presentation/master_data_hub.dart';
 
 class AdaptiveShell extends StatefulWidget {
   final LocalSessionContext sessionContext;
@@ -77,10 +78,7 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
         selectedIcon: Icons.more_horiz,
         permission: Permission.settings,
         alternatePermission: Permission.manageUsers,
-        page: _ModulePlaceholder(
-          title: 'More',
-          icon: Icons.more_horiz,
-        ),
+        page: MasterDataHub(),
       ),
     ];
 
