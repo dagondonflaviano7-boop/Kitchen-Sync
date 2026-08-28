@@ -1,0 +1,36 @@
+name: kitchen_sync
+description: Offline-first POS, inventory, recipe, cashier and costing foundation.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.8.1
+  sqflite: ^2.4.2
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.1
+  firebase_database: ^11.3.4
+  connectivity_plus: ^6.1.3
+  internet_connection_checker_plus: ^2.7.1
+  device_info_plus: ^11.3.3
+  shared_preferences: ^2.5.2
+  uuid: ^4.5.1
+  package_info_plus: ^8.3.0
+  http: ^1.3.0
+  crypto: ^3.0.6
+  intl: ^0.20.2
+  collection: ^1.19.1
+  cupertino_icons: ^1.0.8
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

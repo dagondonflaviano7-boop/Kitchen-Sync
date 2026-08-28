@@ -1,0 +1,13 @@
+{
+  "rules": {
+    ".read": false, ".write": false,
+    "users": { "$uid": { ".read": "$uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'ADMIN'", ".write": "root.child('users').child(auth.uid).child('role').val() === 'ADMIN'" } },
+    "stores": { "$storeId": { ".read": "auth != null && (root.child('users').child(auth.uid).child('storeId').val() === $storeId || root.child('users').child(auth.uid).child('role').val() === 'ADMIN')", ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'" } },
+    "sales": { "$saleId": { ".read": "auth != null && data.child('storeId').val() === root.child('users').child(auth.uid).child('storeId').val()", ".write": "auth != null && (!data.exists() || data.val() === newData.val()) && newData.child('storeId').val() === root.child('users').child(auth.uid).child('storeId').val()" } },
+    "products": { "$id": { ".read": "auth != null", ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'CASHIER'" } },
+    "ingredients": { "$id": { ".read": "auth != null", ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'CASHIER'" } },
+    "inventoryMovements": { "$id": { ".read": "auth != null", ".write": "auth != null && !data.exists()" } },
+    "ingredientMovements": { "$id": { ".read": "auth != null", ".write": "auth != null && !data.exists()" } },
+    "auditLogs": { "$id": { ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'ADMIN'", ".write": "auth != null && !data.exists()" } }
+  }
+}
