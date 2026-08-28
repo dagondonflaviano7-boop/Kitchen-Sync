@@ -13,3 +13,4 @@ key.properties
 android/key.properties
 android/*.jks
 android/app/*.jks
+kitchen-sync-bootstrap.json
