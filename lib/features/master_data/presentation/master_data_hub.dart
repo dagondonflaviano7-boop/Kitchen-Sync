@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kitchen_sync/features/master_data/suppliers/presentation/supplier_screen.dart';
 import 'package:kitchen_sync/features/master_data/units/presentation/unit_of_measure_screen.dart';
 
 class MasterDataHub extends StatelessWidget {
@@ -48,13 +49,22 @@ class MasterDataHub extends StatelessWidget {
                               );
                             },
                           ),
-                          const _MasterDataCard(
+                          _MasterDataCard(
                             title: 'Suppliers',
                             subtitle: 'Manage supplier records, contacts, '
                                 'terms, and lead times.',
                             icon: Icons.local_shipping_outlined,
-                            color: Color(0xFF4D6588),
-                            enabled: false,
+                            color: const Color(0xFF4D6588),
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const SupplierScreen(
+                                    currentUserId: 'ADMIN',
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
