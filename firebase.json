@@ -1,5 +1,1 @@
-{
-  "database": {
-    "rules": "firebase/database.rules.json"
-  }
-}
+{"database":{"rules":"firebase/database.rules.json"},"flutter":{"platforms":{"android":{"default":{"projectId":"kitchen-sync-ad5a6","appId":"1:656485263226:android:d6d3e92a1984ff1f2618c3","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"kitchen-sync-ad5a6","configurations":{"android":"1:656485263226:android:d6d3e92a1984ff1f2618c3"}}}}}}

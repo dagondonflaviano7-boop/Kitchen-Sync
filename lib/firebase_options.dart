@@ -57,6 +57,7 @@ class DefaultFirebaseOptions {
     appId: '1:656485263226:android:d6d3e92a1984ff1f2618c3',
     messagingSenderId: '656485263226',
     projectId: 'kitchen-sync-ad5a6',
+    databaseURL: 'https://kitchen-sync-ad5a6-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'kitchen-sync-ad5a6.firebasestorage.app',
   );
 }
