@@ -13,7 +13,7 @@ class AppDatabase {
         version: AppConstants.databaseVersion,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
-          await db.execute('PRAGMA journal_mode = WAL');
+          await db.rawQuery('PRAGMA journal_mode = WAL');
         },
         onCreate: (db, version) async {
           for (final sql in migrationV1) {
