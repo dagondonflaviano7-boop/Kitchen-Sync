@@ -45,10 +45,10 @@ void main() {
       ).readAsStringSync();
 
       final int unitSave = source.indexOf(
-        'unitDao.upsertAll',
+        'unitDao.upsert(',
       );
       final int conversionSave = source.indexOf(
-        'conversionDao.upsertAll',
+        'conversionDao.upsert(',
       );
 
       expect(unitSave, greaterThanOrEqualTo(0));

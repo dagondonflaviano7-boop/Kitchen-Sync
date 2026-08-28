@@ -31,15 +31,33 @@ class UnitOfMeasureRepository {
           timestamp: now,
         );
 
-        await unitDao.upsertAll(
-          transaction,
-          units,
-        );
+        for (final UnitOfMeasure unit in units) {
+          final UnitOfMeasure? existing = await unitDao.findByCode(
+            transaction,
+            unit.code,
+          );
 
-        await conversionDao.upsertAll(
-          transaction,
-          conversions,
-        );
+          if (existing == null) {
+            await unitDao.upsert(
+              transaction,
+              unit,
+            );
+          }
+        }
+
+        for (final UnitConversion conversion in conversions) {
+          final UnitConversion? existing = await conversionDao.findById(
+            transaction,
+            conversion.id,
+          );
+
+          if (existing == null) {
+            await conversionDao.upsert(
+              transaction,
+              conversion,
+            );
+          }
+        }
       },
     );
   }
