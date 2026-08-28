@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:kitchen_sync/data/repositories/local_session_repository.dart';
@@ -43,8 +45,10 @@ class RemoteSessionRepository {
     String firebaseUid,
   ) async {
     try {
-      final DataSnapshot profileSnapshot =
-          await database.ref('users/$firebaseUid').get();
+      final DataSnapshot profileSnapshot = await database
+          .ref('users/$firebaseUid')
+          .get()
+          .timeout(const Duration(seconds: 15));
 
       if (!profileSnapshot.exists || profileSnapshot.value == null) {
         throw const SessionAccessException(
@@ -78,8 +82,10 @@ class RemoteSessionRepository {
         );
       }
 
-      final DataSnapshot storeSnapshot =
-          await database.ref('stores/${profile.storeId}').get();
+      final DataSnapshot storeSnapshot = await database
+          .ref('stores/${profile.storeId}')
+          .get()
+          .timeout(const Duration(seconds: 15));
 
       if (!storeSnapshot.exists || storeSnapshot.value == null) {
         throw const SessionAccessException(
@@ -123,6 +129,20 @@ class RemoteSessionRepository {
       );
     } on SessionAccessException {
       rethrow;
+    } on TimeoutException catch (error) {
+      final LocalSessionContext? cached =
+          await localRepository.loadContext(firebaseUid);
+
+      if (cached != null && cached.profile.active && cached.store.active) {
+        return cached;
+      }
+
+      throw SessionAccessException(
+        SessionAccessFailure.networkUnavailable,
+        'Kitchen Sync could not verify access within '
+        'the allowed time.',
+        cause: error,
+      );
     } on FirebaseException catch (error) {
       final LocalSessionContext? cached =
           await localRepository.loadContext(firebaseUid);
