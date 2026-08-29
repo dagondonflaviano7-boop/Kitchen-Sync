@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kitchen_sync/data/repositories/unit_of_measure_repository.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:uuid/uuid.dart';
 
@@ -387,6 +390,12 @@ class _UnitOfMeasureFormScreenState extends State<UnitOfMeasureFormScreen> {
       unit.validate();
 
       await _repository.saveUnit(unit);
+
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.unitSaved,
+        ),
+      );
 
       if (!mounted) {
         return;

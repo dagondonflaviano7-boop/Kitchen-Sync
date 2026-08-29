@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:kitchen_sync/data/repositories/supplier_repository.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
 import 'package:kitchen_sync/features/master_data/suppliers/presentation/supplier_form_screen.dart';
 
@@ -228,6 +231,12 @@ class _SupplierScreenState extends State<SupplierScreen> {
         currentUserId: currentUserId,
       );
 
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.supplierDeleted,
+        ),
+      );
+
       await _loadSuppliers();
 
       if (!mounted) {
@@ -345,6 +354,12 @@ class _SupplierScreenState extends State<SupplierScreen> {
       await _repository.setSupplierActive(
         supplier.id,
         !supplier.active,
+      );
+
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.supplierStatusChanged,
+        ),
       );
 
       await _loadSuppliers();

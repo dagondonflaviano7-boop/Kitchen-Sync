@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:kitchen_sync/data/repositories/unit_of_measure_repository.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:kitchen_sync/features/master_data/units/presentation/unit_of_measure_form_screen.dart';
 
@@ -212,6 +215,12 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
     try {
       await _repository.deleteUnit(unit);
 
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.unitDeleted,
+        ),
+      );
+
       await _loadUnits();
 
       if (!mounted) {
@@ -255,6 +264,12 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
     await _repository.setUnitActive(
       unit.id,
       !unit.active,
+    );
+
+    unawaited(
+      MasterDataAutoSync.instance.trigger(
+        reason: MasterDataAutoSyncReason.unitStatusChanged,
+      ),
     );
 
     await _loadUnits();

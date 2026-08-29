@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kitchen_sync/data/repositories/supplier_repository.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:uuid/uuid.dart';
@@ -328,6 +331,12 @@ class _SupplierFormScreenState extends State<SupplierFormScreen> {
       supplier.validate();
 
       await _repository.saveSupplier(supplier);
+
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.supplierSaved,
+        ),
+      );
 
       if (!mounted) {
         return;

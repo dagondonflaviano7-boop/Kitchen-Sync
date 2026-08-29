@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 import 'package:kitchen_sync/core/connectivity/connectivity_service.dart';
 import 'package:kitchen_sync/core/constants/app_constants.dart';
 import 'package:kitchen_sync/core/permissions/role.dart';
@@ -18,9 +21,93 @@ class AdaptiveShell extends StatefulWidget {
   State<AdaptiveShell> createState() => _AdaptiveShellState();
 }
 
-class _AdaptiveShellState extends State<AdaptiveShell> {
+class _AdaptiveShellState extends State<AdaptiveShell>
+    with WidgetsBindingObserver {
   int selectedIndex = 0;
   bool signingOut = false;
+
+  final ConnectivityService _connectivityService = ConnectivityService();
+
+  StreamSubscription<bool>? _connectivitySubscription;
+
+  bool _wasOnline = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.login,
+          force: true,
+        ),
+      );
+    });
+
+    unawaited(_startConnectivityListener());
+  }
+
+  Future<void> _startConnectivityListener() async {
+    try {
+      _wasOnline = await _connectivityService.isOnline;
+
+      _connectivitySubscription = _connectivityService.onlineStream.listen(
+        (bool online) {
+          final bool connectionRestored = online && !_wasOnline;
+
+          _wasOnline = online;
+
+          if (connectionRestored) {
+            unawaited(
+              MasterDataAutoSync.instance.trigger(
+                reason: MasterDataAutoSyncReason.connectivityRestored,
+                force: true,
+              ),
+            );
+          }
+        },
+        onError: (
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          debugPrint(
+            '[MASTER_DATA_AUTO_SYNC] '
+            'Connectivity listener failed: '
+            '$error\n$stackTrace',
+          );
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[MASTER_DATA_AUTO_SYNC] '
+        'Unable to initialize connectivity: '
+        '$error\n$stackTrace',
+      );
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(
+        MasterDataAutoSync.instance.trigger(
+          reason: MasterDataAutoSyncReason.appResume,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
 
   UserRole get role => widget.sessionContext.profile.role;
 
