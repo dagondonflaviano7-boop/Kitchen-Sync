@@ -3,7 +3,12 @@ import 'package:kitchen_sync/features/master_data/suppliers/presentation/supplie
 import 'package:kitchen_sync/features/master_data/units/presentation/unit_of_measure_screen.dart';
 
 class MasterDataHub extends StatelessWidget {
-  const MasterDataHub({super.key});
+  final String currentUserId;
+
+  const MasterDataHub({
+    super.key,
+    required this.currentUserId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -59,8 +64,8 @@ class MasterDataHub extends StatelessWidget {
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                  builder: (_) => const SupplierScreen(
-                                    currentUserId: 'ADMIN',
+                                  builder: (_) => SupplierScreen(
+                                    currentUserId: currentUserId,
                                   ),
                                 ),
                               );

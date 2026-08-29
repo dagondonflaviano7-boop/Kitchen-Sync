@@ -71,14 +71,16 @@ class _AdaptiveShellState extends State<AdaptiveShell> {
           icon: Icons.bar_chart,
         ),
       ),
-      const _ShellDestination(
+      _ShellDestination(
         label: 'More',
         railLabel: 'More',
         icon: Icons.more_horiz,
         selectedIcon: Icons.more_horiz,
         permission: Permission.settings,
         alternatePermission: Permission.manageUsers,
-        page: MasterDataHub(),
+        page: MasterDataHub(
+          currentUserId: widget.sessionContext.profile.id,
+        ),
       ),
     ];
 

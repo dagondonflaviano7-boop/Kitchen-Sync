@@ -211,4 +211,91 @@ void main() {
       );
     });
   });
+
+  authenticatedSupplierAuditTests();
+}
+
+void authenticatedSupplierAuditTests() {
+  final String shellSource = File(
+    'lib/features/dashboard/presentation/'
+    'adaptive_shell.dart',
+  ).readAsStringSync();
+
+  final String hubSource = File(
+    'lib/features/master_data/presentation/'
+    'master_data_hub.dart',
+  ).readAsStringSync();
+
+  final String supplierScreenSource = File(
+    'lib/features/master_data/suppliers/presentation/'
+    'supplier_screen.dart',
+  ).readAsStringSync();
+
+  final String supplierFormSource = File(
+    'lib/features/master_data/suppliers/presentation/'
+    'supplier_form_screen.dart',
+  ).readAsStringSync();
+
+  group('Authenticated Supplier audit identity', () {
+    test('Master Data Hub requires a user ID', () {
+      expect(
+        hubSource.contains(
+          'required this.currentUserId',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Adaptive Shell supplies profile ID', () {
+      expect(
+        shellSource.contains(
+          'widget.sessionContext.profile.id',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Supplier screen receives the user ID', () {
+      expect(
+        hubSource.contains(
+          'currentUserId: currentUserId',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Supplier screen forwards the user ID', () {
+      expect(
+        supplierScreenSource.contains(
+          'currentUserId: widget.currentUserId',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Supplier form records the audit identity', () {
+      expect(
+        supplierFormSource.contains(
+          'original?.createdBy ?? widget.currentUserId',
+        ),
+        isTrue,
+      );
+
+      expect(
+        supplierFormSource.contains(
+          'updatedBy: widget.currentUserId',
+        ),
+        isTrue,
+      );
+    });
+
+    test('fixed ADMIN audit identity is removed', () {
+      expect(
+        hubSource.contains(
+          "currentUserId: 'ADMIN'",
+        ),
+        isFalse,
+      );
+    });
+  });
 }

@@ -35,7 +35,14 @@ void main() {
 
       expect(
         adaptiveShell.contains(
-          'page: MasterDataHub()',
+          'page: MasterDataHub(',
+        ),
+        isTrue,
+      );
+
+      expect(
+        adaptiveShell.contains(
+          'widget.sessionContext.profile.id',
         ),
         isTrue,
       );
