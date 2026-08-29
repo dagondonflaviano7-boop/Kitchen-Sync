@@ -33,6 +33,24 @@ class SupplierDao {
     return Supplier.fromSqlite(rows.first);
   }
 
+  Future<Supplier?> findByIdIncludingDeleted(
+    DatabaseExecutor database,
+    String supplierId,
+  ) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'suppliers',
+      where: 'id = ?',
+      whereArgs: <Object?>[supplierId],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    return Supplier.fromSqlite(rows.first);
+  }
+
   Future<Supplier?> findByCode(
     DatabaseExecutor database,
     String supplierCode,
@@ -223,5 +241,113 @@ class SupplierDao {
     }
 
     return false;
+  }
+
+  Future<List<Supplier>> findPending(
+    DatabaseExecutor database, {
+    int limit = 100,
+  }) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'suppliers',
+      where: 'sync_status IN (?, ?)',
+      whereArgs: const <Object?>[
+        'PENDING',
+        'ERROR',
+      ],
+      orderBy: 'updated_at, id',
+      limit: limit,
+    );
+
+    return rows.map(Supplier.fromSqlite).toList(growable: false);
+  }
+
+  Future<List<Supplier>> findAllIncludingDeleted(
+    DatabaseExecutor database,
+  ) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'suppliers',
+      orderBy: 'updated_at, id',
+    );
+
+    return rows.map(Supplier.fromSqlite).toList(growable: false);
+  }
+
+  Future<void> markSyncing(
+    DatabaseExecutor database,
+    String supplierId,
+  ) async {
+    final int updated = await database.update(
+      'suppliers',
+      <String, Object?>{
+        'sync_status': 'SYNCING',
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[supplierId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Supplier record was not found.',
+      );
+    }
+  }
+
+  Future<void> markSynced(
+    DatabaseExecutor database,
+    String supplierId, {
+    required int serverVersion,
+  }) async {
+    final int updated = await database.update(
+      'suppliers',
+      <String, Object?>{
+        'sync_status': 'SYNCED',
+        'server_version': serverVersion,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[supplierId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Supplier record was not found.',
+      );
+    }
+  }
+
+  Future<void> markSyncError(
+    DatabaseExecutor database,
+    String supplierId,
+  ) async {
+    final int updated = await database.update(
+      'suppliers',
+      <String, Object?>{
+        'sync_status': 'ERROR',
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[supplierId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Supplier record was not found.',
+      );
+    }
+  }
+
+  Future<void> upsertRemote(
+    DatabaseExecutor database,
+    Supplier supplier,
+  ) async {
+    final Map<String, Object?> values = Map<String, Object?>.from(
+      supplier.toSqlite(),
+    );
+
+    values['sync_status'] = 'SYNCED';
+
+    await database.insert(
+      'suppliers',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }

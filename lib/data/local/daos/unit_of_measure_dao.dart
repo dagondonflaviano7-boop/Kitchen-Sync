@@ -42,6 +42,24 @@ class UnitOfMeasureDao {
     return UnitOfMeasure.fromSqlite(rows.first);
   }
 
+  Future<UnitOfMeasure?> findByIdIncludingDeleted(
+    DatabaseExecutor database,
+    String unitId,
+  ) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'units_of_measure',
+      where: 'id = ?',
+      whereArgs: <Object?>[unitId],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    return UnitOfMeasure.fromSqlite(rows.first);
+  }
+
   Future<UnitOfMeasure?> findByCode(
     DatabaseExecutor database,
     String code,
@@ -231,5 +249,113 @@ class UnitOfMeasureDao {
     }
 
     return false;
+  }
+
+  Future<List<UnitOfMeasure>> findPending(
+    DatabaseExecutor database, {
+    int limit = 100,
+  }) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'units_of_measure',
+      where: 'sync_status IN (?, ?)',
+      whereArgs: const <Object?>[
+        'PENDING',
+        'ERROR',
+      ],
+      orderBy: 'updated_at, id',
+      limit: limit,
+    );
+
+    return rows.map(UnitOfMeasure.fromSqlite).toList(growable: false);
+  }
+
+  Future<List<UnitOfMeasure>> findAllIncludingDeleted(
+    DatabaseExecutor database,
+  ) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'units_of_measure',
+      orderBy: 'updated_at, id',
+    );
+
+    return rows.map(UnitOfMeasure.fromSqlite).toList(growable: false);
+  }
+
+  Future<void> markSyncing(
+    DatabaseExecutor database,
+    String unitId,
+  ) async {
+    final int updated = await database.update(
+      'units_of_measure',
+      <String, Object?>{
+        'sync_status': 'SYNCING',
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[unitId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Unit record was not found.',
+      );
+    }
+  }
+
+  Future<void> markSynced(
+    DatabaseExecutor database,
+    String unitId, {
+    required int serverVersion,
+  }) async {
+    final int updated = await database.update(
+      'units_of_measure',
+      <String, Object?>{
+        'sync_status': 'SYNCED',
+        'server_version': serverVersion,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[unitId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Unit record was not found.',
+      );
+    }
+  }
+
+  Future<void> markSyncError(
+    DatabaseExecutor database,
+    String unitId,
+  ) async {
+    final int updated = await database.update(
+      'units_of_measure',
+      <String, Object?>{
+        'sync_status': 'ERROR',
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[unitId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Unit record was not found.',
+      );
+    }
+  }
+
+  Future<void> upsertRemote(
+    DatabaseExecutor database,
+    UnitOfMeasure unit,
+  ) async {
+    final Map<String, Object?> values = Map<String, Object?>.from(
+      unit.toSqlite(),
+    );
+
+    values['sync_status'] = 'SYNCED';
+
+    await database.insert(
+      'units_of_measure',
+      values,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }
