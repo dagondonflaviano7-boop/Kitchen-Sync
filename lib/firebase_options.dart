@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -59,5 +56,15 @@ class DefaultFirebaseOptions {
     projectId: 'kitchen-sync-ad5a6',
     databaseURL: 'https://kitchen-sync-ad5a6-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'kitchen-sync-ad5a6.firebasestorage.app',
+  );
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyA4F0V93gsMfOsn54InoVrexJUeYXr4Ppg',
+    appId: '1:656485263226:web:427e7295a6bd872a2618c3',
+    messagingSenderId: '656485263226',
+    projectId: 'kitchen-sync-ad5a6',
+    authDomain: 'kitchen-sync-ad5a6.firebaseapp.com',
+    databaseURL: 'https://kitchen-sync-ad5a6-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'kitchen-sync-ad5a6.firebasestorage.app',
+    measurementId: 'G-Q6M3SE6YWK',
   );
 }

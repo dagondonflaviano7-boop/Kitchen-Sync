@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:kitchen_sync/core/constants/app_constants.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v1.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v2.dart';
@@ -17,10 +18,12 @@ class AppDatabase {
   }
 
   Future<Database> _open() async {
-    final String databasePath = join(
-      await getDatabasesPath(),
-      AppConstants.databaseName,
-    );
+    final String databasePath = kIsWeb
+        ? AppConstants.databaseName
+        : join(
+            await getDatabasesPath(),
+            AppConstants.databaseName,
+          );
 
     return openDatabase(
       databasePath,

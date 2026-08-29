@@ -1,13 +1,17 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kitchen_sync/app/app.dart';
 import 'package:kitchen_sync/data/local/database.dart';
+import 'package:kitchen_sync/data/local/database_platform.dart';
 import 'package:kitchen_sync/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  initializeDatabasePlatform();
 
   runApp(
     const ProviderScope(
@@ -37,11 +41,13 @@ class _KitchenSyncBootstrapState extends State<KitchenSyncBootstrap> {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    FirebaseDatabase.instance.setPersistenceCacheSizeBytes(
-      20 * 1024 * 1024,
-    );
+    if (!kIsWeb) {
+      FirebaseDatabase.instance.setPersistenceCacheSizeBytes(
+        20 * 1024 * 1024,
+      );
 
-    FirebaseDatabase.instance.setPersistenceEnabled(true);
+      FirebaseDatabase.instance.setPersistenceEnabled(true);
+    }
 
     await AppDatabase.instance.database;
   }
