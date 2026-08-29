@@ -258,7 +258,7 @@ void authenticatedSupplierAuditTests() {
     test('Supplier screen receives the user ID', () {
       expect(
         hubSource.contains(
-          'currentUserId: currentUserId',
+          'currentUserId: widget.currentUserId',
         ),
         isTrue,
       );
@@ -295,6 +295,120 @@ void authenticatedSupplierAuditTests() {
           "currentUserId: 'ADMIN'",
         ),
         isFalse,
+      );
+    });
+  });
+
+  masterDataSyncTriggerTests();
+}
+
+void masterDataSyncTriggerTests() {
+  final String hubSource = File(
+    'lib/features/master_data/presentation/'
+    'master_data_hub.dart',
+  ).readAsStringSync();
+
+  group('Master Data synchronization trigger', () {
+    test('Master Data Hub owns the sync service', () {
+      expect(
+        hubSource.contains(
+          'MasterDataSyncService',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'MasterDataSyncService()',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Sync action calls synchronize', () {
+      expect(
+        hubSource.contains(
+          '_synchronizeMasterData',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'await _syncService.synchronize()',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Sync action prevents duplicate requests', () {
+      expect(
+        hubSource.contains(
+          '_syncing || _syncService.isRunning',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Master Data Hub exposes Sync Master Data', () {
+      expect(
+        hubSource.contains(
+          "'Sync Master Data'",
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'onTap: _synchronizeMasterData',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Sync action handles offline mode', () {
+      expect(
+        hubSource.contains(
+          'result.offline',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'Local changes remain safely stored.',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Sync action reports upload and download totals', () {
+      expect(
+        hubSource.contains(
+          'result.uploadedUnits',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'result.uploadedSuppliers',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'result.downloadedUnits',
+        ),
+        isTrue,
+      );
+
+      expect(
+        hubSource.contains(
+          'result.downloadedSuppliers',
+        ),
+        isTrue,
       );
     });
   });
