@@ -30,7 +30,7 @@ class UnitOfMeasureDao {
   ) async {
     final List<Map<String, Object?>> rows = await database.query(
       'units_of_measure',
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[id],
       limit: 1,
     );
@@ -48,7 +48,7 @@ class UnitOfMeasureDao {
   ) async {
     final List<Map<String, Object?>> rows = await database.query(
       'units_of_measure',
-      where: 'code = ?',
+      where: 'code = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[
         code.trim().toUpperCase(),
       ],
@@ -68,7 +68,9 @@ class UnitOfMeasureDao {
   }) async {
     final List<Map<String, Object?>> rows = await database.query(
       'units_of_measure',
-      where: includeInactive ? null : 'active = ?',
+      where: includeInactive
+          ? 'deleted_at IS NULL'
+          : 'active = ? AND deleted_at IS NULL',
       whereArgs: includeInactive ? null : <Object?>[1],
       orderBy: 'unit_type, name COLLATE NOCASE',
     );
@@ -95,7 +97,7 @@ class UnitOfMeasureDao {
       '%$searchText%',
     ];
 
-    String where = '(code LIKE ? OR name LIKE ?)';
+    String where = '(code LIKE ? OR name LIKE ?) AND deleted_at IS NULL';
 
     if (!includeInactive) {
       where = '$where AND active = ?';
@@ -155,5 +157,79 @@ class UnitOfMeasureDao {
       where: 'id = ?',
       whereArgs: <Object?>[id],
     );
+  }
+
+  Future<void> softDelete(
+    DatabaseExecutor database,
+    String unitId, {
+    required DateTime deletedAt,
+  }) async {
+    final String timestamp = deletedAt.toUtc().toIso8601String();
+
+    final int updated = await database.update(
+      'units_of_measure',
+      <String, Object?>{
+        'active': 0,
+        'deleted_at': timestamp,
+        'updated_at': timestamp,
+        'sync_status': 'PENDING',
+      },
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: <Object?>[unitId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The unit record was not found or was already deleted.',
+      );
+    }
+  }
+
+  Future<bool> isReferenced(
+    DatabaseExecutor database,
+    String unitCode,
+  ) async {
+    final String code = unitCode.trim().toUpperCase();
+
+    final List<Map<String, Object?>> checks = <Map<String, Object?>>[
+      <String, Object?>{
+        'table': 'ingredients',
+        'where': 'unit_of_measure = ? OR purchase_unit = ?',
+        'arguments': <Object?>[code, code],
+      },
+      <String, Object?>{
+        'table': 'recipe_items',
+        'where': 'unit = ?',
+        'arguments': <Object?>[code],
+      },
+      <String, Object?>{
+        'table': 'unit_conversions',
+        'where': 'source_unit_code = ? '
+            'OR target_unit_code = ?',
+        'arguments': <Object?>[code, code],
+      },
+      <String, Object?>{
+        'table': 'product_packaging_conversions',
+        'where': 'source_unit_code = ? '
+            'OR target_unit_code = ?',
+        'arguments': <Object?>[code, code],
+      },
+    ];
+
+    for (final Map<String, Object?> check in checks) {
+      final List<Map<String, Object?>> rows = await database.query(
+        check['table']! as String,
+        columns: const <String>['id'],
+        where: check['where']! as String,
+        whereArgs: check['arguments']! as List<Object?>,
+        limit: 1,
+      );
+
+      if (rows.isNotEmpty) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }

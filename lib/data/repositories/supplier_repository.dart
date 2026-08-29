@@ -95,4 +95,43 @@ class SupplierRepository {
       active,
     );
   }
+
+  Future<void> deleteSupplier(
+    Supplier supplier, {
+    required String currentUserId,
+  }) async {
+    final String authenticatedUserId = currentUserId.trim();
+
+    if (authenticatedUserId.isEmpty) {
+      throw StateError(
+        'Authenticated user identity is required.',
+      );
+    }
+
+    final Database database = await AppDatabase.instance.database;
+
+    await database.transaction(
+      (Transaction transaction) async {
+        final bool referenced = await supplierDao.isReferenced(
+          transaction,
+          supplier.id,
+        );
+
+        if (referenced) {
+          throw StateError(
+            'This supplier cannot be deleted because it '
+            'is used by existing records. '
+            'Deactivate it instead.',
+          );
+        }
+
+        await supplierDao.softDelete(
+          transaction,
+          supplier.id,
+          deletedAt: DateTime.now().toUtc(),
+          updatedBy: currentUserId,
+        );
+      },
+    );
+  }
 }

@@ -21,7 +21,7 @@ class SupplierDao {
   ) async {
     final List<Map<String, Object?>> rows = await database.query(
       'suppliers',
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[id],
       limit: 1,
     );
@@ -39,7 +39,7 @@ class SupplierDao {
   ) async {
     final List<Map<String, Object?>> rows = await database.query(
       'suppliers',
-      where: 'supplier_code = ?',
+      where: 'supplier_code = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[
         supplierCode.trim().toUpperCase(),
       ],
@@ -159,5 +159,69 @@ class SupplierDao {
         'The supplier record was not found.',
       );
     }
+  }
+
+  Future<void> softDelete(
+    DatabaseExecutor database,
+    String supplierId, {
+    required DateTime deletedAt,
+    required String updatedBy,
+  }) async {
+    final String timestamp = deletedAt.toUtc().toIso8601String();
+
+    final int updated = await database.update(
+      'suppliers',
+      <String, Object?>{
+        'active': 0,
+        'deleted_at': timestamp,
+        'updated_at': timestamp,
+        'updated_by': updatedBy,
+        'sync_status': 'PENDING',
+      },
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: <Object?>[supplierId],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The supplier record was not found or was already deleted.',
+      );
+    }
+  }
+
+  Future<bool> isReferenced(
+    DatabaseExecutor database,
+    String supplierId,
+  ) async {
+    const List<Map<String, String>> checks = <Map<String, String>>[
+      <String, String>{
+        'table': 'products',
+        'column': 'supplier_id',
+      },
+      <String, String>{
+        'table': 'ingredients',
+        'column': 'supplier_id',
+      },
+      <String, String>{
+        'table': 'receiving',
+        'column': 'supplier_id',
+      },
+    ];
+
+    for (final Map<String, String> check in checks) {
+      final List<Map<String, Object?>> rows = await database.query(
+        check['table']!,
+        columns: const <String>['id'],
+        where: '${check['column']} = ?',
+        whereArgs: <Object?>[supplierId],
+        limit: 1,
+      );
+
+      if (rows.isNotEmpty) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }

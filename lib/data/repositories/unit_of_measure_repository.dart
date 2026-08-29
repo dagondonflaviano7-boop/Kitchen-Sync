@@ -7,6 +7,18 @@ import 'package:kitchen_sync/domain/services/standard_units.dart';
 import 'package:sqflite/sqflite.dart';
 
 class UnitOfMeasureRepository {
+  static const Set<String> protectedStandardCodes = <String>{
+    'PCS',
+    'GRAM',
+    'KG',
+    'ML',
+    'LITER',
+    'PACK',
+    'BOX',
+    'BOTTLE',
+    'CAN',
+  };
+
   final UnitOfMeasureDao unitDao;
   final UnitConversionDao conversionDao;
 
@@ -179,6 +191,46 @@ class UnitOfMeasureRepository {
     throw StateError(
       'No active universal conversion exists '
       'from $source to $target.',
+    );
+  }
+
+  Future<void> deleteUnit(
+    UnitOfMeasure unit,
+  ) async {
+    final String normalizedCode = unit.code.trim().toUpperCase();
+
+    if (protectedStandardCodes.contains(
+      normalizedCode,
+    )) {
+      throw StateError(
+        'Standard units cannot be deleted. '
+        'Deactivate the unit instead.',
+      );
+    }
+
+    final Database database = await AppDatabase.instance.database;
+
+    await database.transaction(
+      (Transaction transaction) async {
+        final bool referenced = await unitDao.isReferenced(
+          transaction,
+          normalizedCode,
+        );
+
+        if (referenced) {
+          throw StateError(
+            'This unit cannot be deleted because it is '
+            'used by existing records. '
+            'Deactivate the unit instead.',
+          );
+        }
+
+        await unitDao.softDelete(
+          transaction,
+          unit.id,
+          deletedAt: DateTime.now().toUtc(),
+        );
+      },
     );
   }
 }

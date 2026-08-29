@@ -34,6 +34,7 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
   UnitType? _unitTypeFilter;
 
   bool _loading = true;
+  bool _deleting = false;
   String? _errorMessage;
 
   @override
@@ -126,6 +127,126 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
         ),
       ),
     );
+  }
+
+  Future<bool> _confirmDeleteUnit(
+    UnitOfMeasure unit,
+  ) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          icon: Icon(
+            Icons.delete_outline,
+            color: Theme.of(context).colorScheme.error,
+            size: 36,
+          ),
+          title: const Text('Delete unit?'),
+          content: Text(
+            '${unit.code} — ${unit.name} will be removed '
+            'from normal master-data lists.\n\n'
+            'Historical records will remain protected. '
+            'The deletion will be marked for synchronization.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  void _showDeleteError(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+  }
+
+  Future<void> _deleteUnit(
+    UnitOfMeasure unit,
+  ) async {
+    if (_deleting) {
+      return;
+    }
+
+    final bool confirmed = await _confirmDeleteUnit(unit);
+
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _deleting = true;
+    });
+
+    try {
+      await _repository.deleteUnit(unit);
+
+      await _loadUnits();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '${unit.code} deleted successfully.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } on StateError catch (error) {
+      _showDeleteError(error.message);
+    } on FormatException catch (error) {
+      _showDeleteError(error.message);
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Unit soft-delete failed: $error\n$stackTrace',
+      );
+
+      _showDeleteError(
+        'Unable to delete the unit. Please try again.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+        });
+      }
+    }
   }
 
   Future<void> _toggleActive(
@@ -331,6 +452,7 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
               unit: unit,
             ),
             onToggleActive: _toggleActive,
+            onDelete: _deleteUnit,
           );
         }
 
@@ -352,6 +474,7 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
                 unit: unit,
               ),
               onToggleActive: () => _toggleActive(unit),
+              onDelete: () => _deleteUnit(unit),
             );
           },
         );
@@ -364,11 +487,13 @@ class _UnitCard extends StatelessWidget {
   final UnitOfMeasure unit;
   final VoidCallback onEdit;
   final VoidCallback onToggleActive;
+  final VoidCallback onDelete;
 
   const _UnitCard({
     required this.unit,
     required this.onEdit,
     required this.onToggleActive,
+    required this.onDelete,
   });
 
   @override
@@ -424,6 +549,10 @@ class _UnitCard extends StatelessWidget {
             if (value == 'toggle') {
               onToggleActive();
             }
+
+            if (value == 'delete') {
+              onDelete();
+            }
           },
           itemBuilder: (_) => [
             const PopupMenuItem<String>(
@@ -452,6 +581,26 @@ class _UnitCard extends StatelessWidget {
                 ],
               ),
             ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_outline,
+                    color: Color(0xFFA34036),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Delete',
+                    style: TextStyle(
+                      color: Color(0xFFA34036),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -462,11 +611,13 @@ class _UnitCard extends StatelessWidget {
 class _UnitTable extends StatelessWidget {
   final List<UnitOfMeasure> units;
   final Future<void> Function(UnitOfMeasure) onEdit;
+  final Future<void> Function(UnitOfMeasure) onDelete;
   final Future<void> Function(UnitOfMeasure) onToggleActive;
 
   const _UnitTable({
     required this.units,
     required this.onEdit,
+    required this.onDelete,
     required this.onToggleActive,
   });
 
@@ -524,6 +675,14 @@ class _UnitTable extends StatelessWidget {
                           onPressed: () => onEdit(unit),
                           icon: const Icon(
                             Icons.edit_outlined,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          onPressed: () => onDelete(unit),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Color(0xFFA34036),
                           ),
                         ),
                         IconButton(

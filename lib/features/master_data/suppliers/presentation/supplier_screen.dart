@@ -38,6 +38,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
 
   bool _loading = true;
   bool _changingStatus = false;
+  bool _deleting = false;
   String? _errorMessage;
 
   List<Supplier> get _filteredSuppliers {
@@ -128,6 +129,143 @@ class _SupplierScreenState extends State<SupplierScreen> {
           ),
         ),
       );
+  }
+
+  Future<bool> _confirmDeleteSupplier(
+    Supplier supplier,
+  ) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          icon: Icon(
+            Icons.delete_outline,
+            color: Theme.of(context).colorScheme.error,
+            size: 36,
+          ),
+          title: const Text('Delete supplier?'),
+          content: Text(
+            '${supplier.supplierName} '
+            '(${supplier.supplierCode}) will be removed '
+            'from normal master-data lists.\n\n'
+            'Existing purchasing, receiving, inventory, '
+            'and costing references will remain protected. '
+            'The deletion will be marked for synchronization.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  void _showDeleteError(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+  }
+
+  Future<void> _deleteSupplier(
+    Supplier supplier,
+  ) async {
+    if (_deleting) {
+      return;
+    }
+
+    final String currentUserId = widget.currentUserId?.trim() ?? '';
+
+    if (currentUserId.isEmpty) {
+      _showDeleteError(
+        'Authenticated user identity is required.',
+      );
+      return;
+    }
+
+    final bool confirmed = await _confirmDeleteSupplier(supplier);
+
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _deleting = true;
+    });
+
+    try {
+      await _repository.deleteSupplier(
+        supplier,
+        currentUserId: currentUserId,
+      );
+
+      await _loadSuppliers();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '${supplier.supplierName} '
+              'deleted successfully.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } on StateError catch (error) {
+      _showDeleteError(error.message);
+    } on FormatException catch (error) {
+      _showDeleteError(error.message);
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Supplier soft-delete failed: '
+        '$error\n$stackTrace',
+      );
+
+      _showDeleteError(
+        'Unable to delete the supplier. '
+        'Please try again.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+        });
+      }
+    }
   }
 
   Future<bool> _confirmStatusChange(
@@ -441,6 +579,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
               supplier: supplier,
             ),
             onToggleActive: _toggleActive,
+            onDelete: _deleteSupplier,
           );
         }
 
@@ -464,6 +603,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
                 supplier: supplier,
               ),
               onToggleActive: () => _toggleActive(supplier),
+              onDelete: () => _deleteSupplier(supplier),
             );
           },
         );
@@ -476,11 +616,13 @@ class _SupplierCard extends StatelessWidget {
   final Supplier supplier;
   final VoidCallback onEdit;
   final VoidCallback onToggleActive;
+  final VoidCallback onDelete;
 
   const _SupplierCard({
     required this.supplier,
     required this.onEdit,
     required this.onToggleActive,
+    required this.onDelete,
   });
 
   @override
@@ -551,6 +693,10 @@ class _SupplierCard extends StatelessWidget {
                     if (value == 'toggle') {
                       onToggleActive();
                     }
+
+                    if (value == 'delete') {
+                      onDelete();
+                    }
                   },
                   itemBuilder: (_) {
                     return [
@@ -576,6 +722,26 @@ class _SupplierCard extends StatelessWidget {
                             const SizedBox(width: 12),
                             Text(
                               supplier.active ? 'Deactivate' : 'Activate',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_outline,
+                              color: Color(0xFFA34036),
+                            ),
+                            SizedBox(width: 12),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Color(0xFFA34036),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -672,11 +838,13 @@ class _SupplierDetailRow extends StatelessWidget {
 class _SupplierTable extends StatelessWidget {
   final List<Supplier> suppliers;
   final Future<void> Function(Supplier) onEdit;
+  final Future<void> Function(Supplier) onDelete;
   final Future<void> Function(Supplier) onToggleActive;
 
   const _SupplierTable({
     required this.suppliers,
     required this.onEdit,
+    required this.onDelete,
     required this.onToggleActive,
   });
 
@@ -750,6 +918,14 @@ class _SupplierTable extends StatelessWidget {
                           onPressed: () => onEdit(supplier),
                           icon: const Icon(
                             Icons.edit_outlined,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          onPressed: () => onDelete(supplier),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Color(0xFFA34036),
                           ),
                         ),
                         IconButton(
