@@ -13,6 +13,9 @@ enum MasterDataAutoSyncReason {
   supplierSaved,
   supplierStatusChanged,
   supplierDeleted,
+  ingredientSaved,
+  ingredientStatusChanged,
+  ingredientDeleted,
   manual,
 }
 
@@ -104,10 +107,14 @@ class MasterDataAutoSync {
         'units uploaded: ${result.uploadedUnits}; '
         'suppliers uploaded: '
         '${result.uploadedSuppliers}; '
+        'ingredients uploaded: '
+        '${result.uploadedIngredients}; '
         'units downloaded: '
         '${result.downloadedUnits}; '
         'suppliers downloaded: '
         '${result.downloadedSuppliers}; '
+        'ingredients downloaded: '
+        '${result.downloadedIngredients}; '
         'preserved: '
         '${result.preservedLocalChanges}; '
         'errors: ${result.errors}.',

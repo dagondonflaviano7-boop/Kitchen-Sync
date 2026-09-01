@@ -1,8 +1,10 @@
 import 'package:kitchen_sync/core/connectivity/connectivity_service.dart';
+import 'package:kitchen_sync/data/local/daos/ingredient_dao.dart';
 import 'package:kitchen_sync/data/local/daos/supplier_dao.dart';
 import 'package:kitchen_sync/data/local/daos/unit_of_measure_dao.dart';
 import 'package:kitchen_sync/data/local/database.dart';
 import 'package:kitchen_sync/data/remote/master_data_remote_repository.dart';
+import 'package:kitchen_sync/domain/models/ingredient.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:sqflite/sqflite.dart';
@@ -10,8 +12,10 @@ import 'package:sqflite/sqflite.dart';
 class MasterDataSyncResult {
   final int uploadedUnits;
   final int uploadedSuppliers;
+  final int uploadedIngredients;
   final int downloadedUnits;
   final int downloadedSuppliers;
+  final int downloadedIngredients;
   final int preservedLocalChanges;
   final int errors;
   final bool offline;
@@ -19,8 +23,10 @@ class MasterDataSyncResult {
   const MasterDataSyncResult({
     required this.uploadedUnits,
     required this.uploadedSuppliers,
+    required this.uploadedIngredients,
     required this.downloadedUnits,
     required this.downloadedSuppliers,
+    required this.downloadedIngredients,
     required this.preservedLocalChanges,
     required this.errors,
     this.offline = false,
@@ -29,8 +35,10 @@ class MasterDataSyncResult {
   const MasterDataSyncResult.offline()
       : uploadedUnits = 0,
         uploadedSuppliers = 0,
+        uploadedIngredients = 0,
         downloadedUnits = 0,
         downloadedSuppliers = 0,
+        downloadedIngredients = 0,
         preservedLocalChanges = 0,
         errors = 0,
         offline = true;
@@ -44,6 +52,7 @@ class MasterDataSyncService {
   final MasterDataRemoteRepository remoteRepository;
   final UnitOfMeasureDao unitDao;
   final SupplierDao supplierDao;
+  final IngredientDao ingredientDao;
   final ConnectivityService connectivityService;
 
   bool _running = false;
@@ -52,6 +61,7 @@ class MasterDataSyncService {
     MasterDataRemoteRepository? remoteRepository,
     this.unitDao = const UnitOfMeasureDao(),
     this.supplierDao = const SupplierDao(),
+    this.ingredientDao = const IngredientDao(),
     ConnectivityService? connectivityService,
   })  : remoteRepository = remoteRepository ?? MasterDataRemoteRepository(),
         connectivityService = connectivityService ?? ConnectivityService();
@@ -78,8 +88,10 @@ class MasterDataSyncService {
 
       int uploadedUnits = 0;
       int uploadedSuppliers = 0;
+      int uploadedIngredients = 0;
       int downloadedUnits = 0;
       int downloadedSuppliers = 0;
+      int downloadedIngredients = 0;
       int preservedLocalChanges = 0;
       int errors = 0;
 
@@ -145,6 +157,37 @@ class MasterDataSyncService {
         }
       }
 
+      final List<Ingredient> pendingIngredients =
+          await ingredientDao.findPending(database);
+
+      for (final Ingredient ingredient in pendingIngredients) {
+        try {
+          await ingredientDao.markSyncing(
+            database,
+            ingredient.id,
+          );
+
+          final int serverVersion = await remoteRepository.uploadIngredient(
+            ingredient,
+          );
+
+          await ingredientDao.markSynced(
+            database,
+            ingredient.id,
+            serverVersion: serverVersion,
+          );
+
+          uploadedIngredients += 1;
+        } catch (_) {
+          errors += 1;
+
+          await ingredientDao.markSyncError(
+            database,
+            ingredient.id,
+          );
+        }
+      }
+
       final List<UnitOfMeasure> remoteUnits =
           await remoteRepository.downloadUnits();
 
@@ -202,11 +245,43 @@ class MasterDataSyncService {
         }
       }
 
+      final List<Ingredient> remoteIngredients =
+          await remoteRepository.downloadIngredients();
+
+      for (final Ingredient remoteIngredient in remoteIngredients) {
+        final Ingredient? localIngredient =
+            await ingredientDao.findByIdIncludingDeleted(
+          database,
+          remoteIngredient.id,
+        );
+
+        if (_hasUnresolvedLocalIngredient(
+          localIngredient,
+        )) {
+          preservedLocalChanges += 1;
+          continue;
+        }
+
+        if (_shouldApplyRemoteIngredient(
+          localIngredient,
+          remoteIngredient,
+        )) {
+          await ingredientDao.upsertRemote(
+            database,
+            remoteIngredient,
+          );
+
+          downloadedIngredients += 1;
+        }
+      }
+
       return MasterDataSyncResult(
         uploadedUnits: uploadedUnits,
         uploadedSuppliers: uploadedSuppliers,
+        uploadedIngredients: uploadedIngredients,
         downloadedUnits: downloadedUnits,
         downloadedSuppliers: downloadedSuppliers,
+        downloadedIngredients: downloadedIngredients,
         preservedLocalChanges: preservedLocalChanges,
         errors: errors,
       );
@@ -229,6 +304,18 @@ class MasterDataSyncService {
 
   bool _hasUnresolvedLocalSupplier(
     Supplier? local,
+  ) {
+    if (local == null) {
+      return false;
+    }
+
+    return local.syncStatus == MasterSyncStatus.pending ||
+        local.syncStatus == MasterSyncStatus.syncing ||
+        local.syncStatus == MasterSyncStatus.error;
+  }
+
+  bool _hasUnresolvedLocalIngredient(
+    Ingredient? local,
   ) {
     if (local == null) {
       return false;
@@ -263,6 +350,27 @@ class MasterDataSyncService {
   bool _shouldApplyRemoteSupplier(
     Supplier? local,
     Supplier remote,
+  ) {
+    if (local == null) {
+      return true;
+    }
+
+    if (remote.serverVersion > local.serverVersion) {
+      return true;
+    }
+
+    if (remote.serverVersion < local.serverVersion) {
+      return false;
+    }
+
+    return remote.updatedAt.isAfter(
+      local.updatedAt,
+    );
+  }
+
+  bool _shouldApplyRemoteIngredient(
+    Ingredient? local,
+    Ingredient remote,
   ) {
     if (local == null) {
       return true;
