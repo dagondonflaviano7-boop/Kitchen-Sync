@@ -27,6 +27,7 @@ dependencies:
   collection: ^1.19.1
   cupertino_icons: ^1.0.8
   sqflite_common_ffi_web: ^1.1.2
+  url_launcher: ^6.3.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

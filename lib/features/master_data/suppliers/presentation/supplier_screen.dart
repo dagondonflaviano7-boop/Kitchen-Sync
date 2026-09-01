@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:kitchen_sync/features/master_data/suppliers/presentation/widgets/supplier_contact_actions.dart';
 import 'package:kitchen_sync/data/repositories/supplier_repository.dart';
 import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
@@ -781,6 +782,20 @@ class _SupplierCard extends StatelessWidget {
                 label: 'Phone',
                 value: supplier.phone!,
               ),
+            if (_hasValue(supplier.phone))
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: 8,
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SupplierContactActions(
+                    phone: supplier.phone,
+                    supplierName: supplier.supplierName,
+                    compact: false,
+                  ),
+                ),
+              ),
             if (_hasValue(supplier.paymentTerms))
               _SupplierDetailRow(
                 icon: Icons.payments_outlined,
@@ -928,6 +943,10 @@ class _SupplierTable extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        SupplierContactActions(
+                          phone: supplier.phone,
+                          supplierName: supplier.supplierName,
+                        ),
                         IconButton(
                           tooltip: 'Edit',
                           onPressed: () => onEdit(supplier),
