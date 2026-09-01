@@ -319,6 +319,7 @@ class _UnitOfMeasureScreenState extends State<UnitOfMeasureScreen> {
         14,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(
             controller: _searchController,
