@@ -967,5 +967,229 @@ void main() {
         );
       },
     );
+
+    test(
+      'deleteRecipe deletes Recipe header',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe recipe = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          recipe,
+        );
+
+        await recipeDao.deleteRecipe(
+          database,
+          recipe.id,
+        );
+
+        final List<Map<String, Object?>> headerRows = await database.query(
+          'recipe_master',
+          where: 'id = ?',
+          whereArgs: <Object?>[
+            recipe.id,
+          ],
+        );
+
+        expect(headerRows, isEmpty);
+
+        final Recipe? loaded = await recipeDao.getRecipeById(
+          database,
+          recipe.id,
+        );
+
+        expect(loaded, isNull);
+      },
+    );
+
+    test(
+      'deleteRecipe cascade-deletes '
+      'Ingredient lines',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe recipe = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          recipe,
+        );
+
+        final List<Map<String, Object?>> rowsBeforeDelete =
+            await database.query(
+          'recipe_ingredients',
+          where: 'recipe_id = ?',
+          whereArgs: <Object?>[
+            recipe.id,
+          ],
+        );
+
+        expect(
+          rowsBeforeDelete,
+          hasLength(2),
+        );
+
+        await recipeDao.deleteRecipe(
+          database,
+          recipe.id,
+        );
+
+        final List<Map<String, Object?>> rowsAfterDelete = await database.query(
+          'recipe_ingredients',
+          where: 'recipe_id = ?',
+          whereArgs: <Object?>[
+            recipe.id,
+          ],
+        );
+
+        expect(rowsAfterDelete, isEmpty);
+      },
+    );
+
+    test(
+      'deleteRecipe rejects blank Recipe ID',
+      () async {
+        await expectLater(
+          recipeDao.deleteRecipe(
+            database,
+            '   ',
+          ),
+          throwsA(
+            isA<FormatException>(),
+          ),
+        );
+      },
+    );
+
+    test(
+      'deleteRecipe rejects unknown Recipe ID',
+      () async {
+        await expectLater(
+          recipeDao.deleteRecipe(
+            database,
+            'recipe-not-found',
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) {
+                return error.message;
+              },
+              'message',
+              'The Recipe record was not found.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'deleteRecipe leaves other Recipes '
+      'untouched',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe first = buildRecipe();
+
+        final Recipe second = buildRecipe(
+          id: 'recipe-second',
+          recipeCode: 'RCP-SECOND-001',
+          recipeName: 'Second Recipe',
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-second',
+              recipeId: 'recipe-second',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 200,
+              costPerUsageUnit: 0.25,
+            ),
+          ],
+        );
+
+        await recipeDao.insertRecipe(
+          database,
+          first,
+        );
+
+        await recipeDao.insertRecipe(
+          database,
+          second,
+        );
+
+        await recipeDao.deleteRecipe(
+          database,
+          first.id,
+        );
+
+        final Recipe? deleted = await recipeDao.getRecipeById(
+          database,
+          first.id,
+        );
+
+        final Recipe? remaining = await recipeDao.getRecipeById(
+          database,
+          second.id,
+        );
+
+        expect(deleted, isNull);
+        expect(remaining, isNotNull);
+        expect(
+          remaining!.recipeName,
+          'Second Recipe',
+        );
+        expect(
+          remaining.ingredients,
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      'deleteRecipe does not delete '
+      'Ingredient Master records',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe recipe = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          recipe,
+        );
+
+        await recipeDao.deleteRecipe(
+          database,
+          recipe.id,
+        );
+
+        final List<Map<String, Object?>> ingredientRows = await database.query(
+          'ingredients',
+          orderBy: 'id',
+        );
+
+        expect(
+          ingredientRows,
+          hasLength(2),
+        );
+
+        expect(
+          ingredientRows.map(
+            (Map<String, Object?> row) {
+              return row['id'];
+            },
+          ),
+          containsAll(
+            <String>[
+              'ingredient-chicken',
+              'ingredient-soy-sauce',
+            ],
+          ),
+        );
+      },
+    );
   });
 }

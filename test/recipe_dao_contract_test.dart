@@ -255,4 +255,120 @@ void main() {
       );
     });
   });
+
+  group('RecipeDao delete implementation', () {
+    test('normalizes Recipe ID', () {
+      final int deletePosition = source.indexOf(
+        'Future<void> deleteRecipe(',
+      );
+
+      final int normalizedPosition = source.indexOf(
+        'recipeId.trim()',
+        deletePosition,
+      );
+
+      expect(
+        normalizedPosition,
+        greaterThan(deletePosition),
+      );
+    });
+
+    test('rejects blank Recipe ID', () {
+      expect(
+        source,
+        contains(
+          "'Recipe ID is required.'",
+        ),
+      );
+    });
+
+    test('deletes from Recipe Master', () {
+      final int deletePosition = source.indexOf(
+        'Future<void> deleteRecipe(',
+      );
+
+      final int databaseDeletePosition = source.indexOf(
+        'database.delete(',
+        deletePosition,
+      );
+
+      final int recipeTablePosition = source.indexOf(
+        "'recipe_master'",
+        databaseDeletePosition,
+      );
+
+      expect(
+        databaseDeletePosition,
+        greaterThan(deletePosition),
+      );
+
+      expect(
+        recipeTablePosition,
+        greaterThan(databaseDeletePosition),
+      );
+    });
+
+    test('deletes only the requested ID', () {
+      final int deletePosition = source.indexOf(
+        'Future<void> deleteRecipe(',
+      );
+
+      final int wherePosition = source.indexOf(
+        "where: 'id = ?'",
+        deletePosition,
+      );
+
+      final int idPosition = source.indexOf(
+        'normalizedId',
+        wherePosition,
+      );
+
+      expect(
+        wherePosition,
+        greaterThan(deletePosition),
+      );
+
+      expect(
+        idPosition,
+        greaterThan(wherePosition),
+      );
+    });
+
+    test('rejects an unknown Recipe', () {
+      expect(
+        source,
+        contains('if (deleted == 0)'),
+      );
+
+      expect(
+        source,
+        contains(
+          'The Recipe record was not found.',
+        ),
+      );
+    });
+
+    test('relies on database cascade deletion', () {
+      final int deletePosition = source.indexOf(
+        'Future<void> deleteRecipe(',
+      );
+
+      final int nextMethodPosition = source.indexOf(
+        'Future<Recipe?> getRecipeById(',
+        deletePosition,
+      );
+
+      final String method = source.substring(
+        deletePosition,
+        nextMethodPosition,
+      );
+
+      expect(
+        method,
+        isNot(
+          contains("'recipe_ingredients'"),
+        ),
+      );
+    });
+  });
 }

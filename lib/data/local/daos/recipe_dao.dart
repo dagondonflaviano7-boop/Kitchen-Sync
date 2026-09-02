@@ -99,10 +99,27 @@ class RecipeDao {
     DatabaseExecutor database,
     String recipeId,
   ) async {
-    throw UnimplementedError(
-      'Recipe deletion will be implemented '
-      'after insertRecipe validation.',
+    final String normalizedId = recipeId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Recipe ID is required.',
+      );
+    }
+
+    final int deleted = await database.delete(
+      'recipe_master',
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
     );
+
+    if (deleted == 0) {
+      throw StateError(
+        'The Recipe record was not found.',
+      );
+    }
   }
 
   Future<Recipe?> getRecipeById(
