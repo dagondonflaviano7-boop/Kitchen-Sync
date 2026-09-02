@@ -120,4 +120,63 @@ void main() {
       );
     });
   });
+
+  group('RecipeDao read implementation', () {
+    test('queries Recipe Master header', () {
+      expect(
+        source,
+        contains(
+          "database.query(\n      'recipe_master'",
+        ),
+      );
+    });
+
+    test('queries Recipe Ingredient lines', () {
+      expect(
+        source,
+        contains(
+          "database.query(\n      'recipe_ingredients'",
+        ),
+      );
+    });
+
+    test('rebuilds Recipe from SQLite', () {
+      expect(
+        source,
+        contains(
+          'Recipe.fromSqlite(',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'RecipeIngredient.fromSqlite',
+        ),
+      );
+    });
+
+    test('attaches Ingredient lines to Recipe', () {
+      expect(
+        source,
+        contains(
+          'ingredients: ingredients',
+        ),
+      );
+    });
+
+    test('sorts Recipes by name and code', () {
+      expect(
+        source,
+        contains(
+          'recipe_name COLLATE NOCASE',
+        ),
+      );
+
+      expect(
+        source,
+        contains('recipe_code'),
+      );
+    });
+  });
 }

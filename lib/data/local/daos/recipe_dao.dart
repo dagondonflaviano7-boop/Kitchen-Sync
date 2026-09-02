@@ -61,12 +61,93 @@ class RecipeDao {
     DatabaseExecutor database,
     String recipeId,
   ) async {
-    return null;
+    final String normalizedId = recipeId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Recipe ID is required.',
+      );
+    }
+
+    final List<Map<String, Object?>> headerRows = await database.query(
+      'recipe_master',
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+      limit: 1,
+    );
+
+    if (headerRows.isEmpty) {
+      return null;
+    }
+
+    final List<RecipeIngredient> ingredients = await _getIngredientsByRecipeId(
+      database,
+      normalizedId,
+    );
+
+    return Recipe.fromSqlite(
+      headerRows.first,
+    ).copyWith(
+      ingredients: ingredients,
+    );
   }
 
   Future<List<Recipe>> getRecipes(
     DatabaseExecutor database,
   ) async {
-    return <Recipe>[];
+    final List<Map<String, Object?>> headerRows = await database.query(
+      'recipe_master',
+      orderBy: '''
+        recipe_name COLLATE NOCASE,
+        recipe_code
+      ''',
+    );
+
+    final List<Recipe> recipes = <Recipe>[];
+
+    for (final Map<String, Object?> header in headerRows) {
+      final Recipe recipe = Recipe.fromSqlite(header);
+
+      final List<RecipeIngredient> ingredients =
+          await _getIngredientsByRecipeId(
+        database,
+        recipe.id,
+      );
+
+      recipes.add(
+        recipe.copyWith(
+          ingredients: ingredients,
+        ),
+      );
+    }
+
+    return List<Recipe>.unmodifiable(
+      recipes,
+    );
+  }
+
+  Future<List<RecipeIngredient>> _getIngredientsByRecipeId(
+    DatabaseExecutor database,
+    String recipeId,
+  ) async {
+    final List<Map<String, Object?>> rows = await database.query(
+      'recipe_ingredients',
+      where: 'recipe_id = ?',
+      whereArgs: <Object?>[
+        recipeId.trim(),
+      ],
+      orderBy: '''
+        ingredient_name COLLATE NOCASE,
+        id
+      ''',
+    );
+
+    return rows
+        .map(
+          RecipeIngredient.fromSqlite,
+        )
+        .toList(growable: false);
   }
 }

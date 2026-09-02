@@ -390,5 +390,197 @@ void main() {
         );
       },
     );
+
+    test(
+      'getRecipeById returns complete Recipe',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe? loaded = await recipeDao.getRecipeById(
+          database,
+          original.id,
+        );
+
+        expect(loaded, isNotNull);
+        expect(loaded!.id, original.id);
+        expect(
+          loaded.recipeCode,
+          original.recipeCode,
+        );
+        expect(
+          loaded.recipeName,
+          original.recipeName,
+        );
+        expect(
+          loaded.category,
+          RecipeCategory.mainDish,
+        );
+        expect(loaded.yieldQuantity, 10);
+        expect(
+          loaded.yieldUnitCode,
+          'SERVING',
+        );
+        expect(loaded.active, isTrue);
+        expect(loaded.ingredients, hasLength(2));
+      },
+    );
+
+    test(
+      'getRecipeById restores Ingredient lines '
+      'and calculated costs',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          original.id,
+        ))!;
+
+        expect(
+          loaded.ingredients.map(
+            (RecipeIngredient line) {
+              return line.ingredientName;
+            },
+          ),
+          containsAll(
+            <String>[
+              'Chicken',
+              'Soy Sauce',
+            ],
+          ),
+        );
+
+        expect(
+          loaded.totalRecipeCost,
+          145,
+        );
+
+        expect(
+          loaded.costPerServing,
+          14.5,
+        );
+      },
+    );
+
+    test(
+      'getRecipeById returns null for unknown ID',
+      () async {
+        final Recipe? loaded = await recipeDao.getRecipeById(
+          database,
+          'recipe-not-found',
+        );
+
+        expect(loaded, isNull);
+      },
+    );
+
+    test(
+      'getRecipeById rejects blank ID',
+      () async {
+        await expectLater(
+          recipeDao.getRecipeById(
+            database,
+            '   ',
+          ),
+          throwsA(
+            isA<FormatException>(),
+          ),
+        );
+      },
+    );
+
+    test(
+      'getRecipes returns complete Recipes '
+      'sorted by name',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe adobo = buildRecipe();
+
+        final Recipe bistek = buildRecipe(
+          id: 'recipe-bistek',
+          recipeCode: 'RCP-BISTEK-001',
+          recipeName: 'Beef Steak',
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-bistek',
+              recipeId: 'recipe-bistek',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 200,
+              costPerUsageUnit: 0.25,
+            ),
+          ],
+        );
+
+        await recipeDao.insertRecipe(
+          database,
+          adobo,
+        );
+
+        await recipeDao.insertRecipe(
+          database,
+          bistek,
+        );
+
+        final List<Recipe> recipes = await recipeDao.getRecipes(
+          database,
+        );
+
+        expect(recipes, hasLength(2));
+
+        expect(
+          recipes.first.recipeName,
+          'Beef Steak',
+        );
+
+        expect(
+          recipes.last.recipeName,
+          'Chicken Adobo',
+        );
+
+        expect(
+          recipes.first.ingredients,
+          hasLength(1),
+        );
+
+        expect(
+          recipes.last.ingredients,
+          hasLength(2),
+        );
+      },
+    );
+
+    test(
+      'getRecipes returns an unmodifiable list',
+      () async {
+        final List<Recipe> recipes = await recipeDao.getRecipes(
+          database,
+        );
+
+        expect(
+          () => recipes.add(
+            buildRecipe(),
+          ),
+          throwsUnsupportedError,
+        );
+      },
+    );
   });
 }
