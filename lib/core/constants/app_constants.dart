@@ -1,6 +1,6 @@
 class AppConstants {
   static const appName = 'Kitchen Sync';
   static const databaseName = 'kitchen_sync.db';
-  static const databaseVersion = 5;
+  static const databaseVersion = 6;
   static const tabletBreakpoint = 720.0;
 }

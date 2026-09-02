@@ -256,20 +256,61 @@ void main() {
     });
   });
 
-  group('RecipeDao delete implementation', () {
-    test('normalizes Recipe ID', () {
+  group('RecipeDao soft-delete implementation', () {
+    test('deleteRecipe delegates to softDelete', () {
       final int deletePosition = source.indexOf(
         'Future<void> deleteRecipe(',
       );
 
-      final int normalizedPosition = source.indexOf(
-        'recipeId.trim()',
+      final int softDeleteCallPosition = source.indexOf(
+        'await softDelete(',
         deletePosition,
       );
 
       expect(
-        normalizedPosition,
+        deletePosition,
+        greaterThanOrEqualTo(0),
+      );
+
+      expect(
+        softDeleteCallPosition,
         greaterThan(deletePosition),
+      );
+    });
+
+    test('provides explicit softDelete operation', () {
+      expect(
+        source,
+        contains(
+          'Future<void> softDelete(',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'required String updatedBy',
+        ),
+      );
+    });
+
+    test('normalizes Recipe and user IDs', () {
+      final int softDeletePosition = source.indexOf(
+        'Future<void> softDelete(',
+      );
+
+      final String method = source.substring(
+        softDeletePosition,
+      );
+
+      expect(
+        method,
+        contains('recipeId.trim()'),
+      );
+
+      expect(
+        method,
+        contains('updatedBy.trim()'),
       );
     });
 
@@ -282,91 +323,129 @@ void main() {
       );
     });
 
-    test('deletes from Recipe Master', () {
-      final int deletePosition = source.indexOf(
-        'Future<void> deleteRecipe(',
-      );
-
-      final int databaseDeletePosition = source.indexOf(
-        'database.delete(',
-        deletePosition,
-      );
-
-      final int recipeTablePosition = source.indexOf(
-        "'recipe_master'",
-        databaseDeletePosition,
-      );
-
-      expect(
-        databaseDeletePosition,
-        greaterThan(deletePosition),
-      );
-
-      expect(
-        recipeTablePosition,
-        greaterThan(databaseDeletePosition),
-      );
-    });
-
-    test('deletes only the requested ID', () {
-      final int deletePosition = source.indexOf(
-        'Future<void> deleteRecipe(',
-      );
-
-      final int wherePosition = source.indexOf(
-        "where: 'id = ?'",
-        deletePosition,
-      );
-
-      final int idPosition = source.indexOf(
-        'normalizedId',
-        wherePosition,
-      );
-
-      expect(
-        wherePosition,
-        greaterThan(deletePosition),
-      );
-
-      expect(
-        idPosition,
-        greaterThan(wherePosition),
-      );
-    });
-
-    test('rejects an unknown Recipe', () {
+    test('rejects blank Updated By value', () {
       expect(
         source,
-        contains('if (deleted == 0)'),
+        contains(
+          "'Updated By is required.'",
+        ),
+      );
+    });
+
+    test('updates Recipe tombstone fields', () {
+      final int softDeletePosition = source.indexOf(
+        'Future<void> softDelete(',
+      );
+
+      final String method = source.substring(
+        softDeletePosition,
+      );
+
+      expect(
+        method,
+        contains('database.update('),
+      );
+
+      expect(
+        method,
+        contains("'recipe_master'"),
+      );
+
+      expect(
+        method,
+        contains("'active': 0"),
+      );
+
+      expect(
+        method,
+        contains("'updated_at': timestamp"),
+      );
+
+      expect(
+        method,
+        contains(
+          "'updated_by': normalizedUserId",
+        ),
+      );
+
+      expect(
+        method,
+        contains(
+          "'sync_status': 'PENDING'",
+        ),
+      );
+
+      expect(
+        method,
+        contains("'deleted_at': timestamp"),
+      );
+    });
+
+    test('updates only a non-deleted Recipe', () {
+      final int softDeletePosition = source.indexOf(
+        'Future<void> softDelete(',
+      );
+
+      final String method = source.substring(
+        softDeletePosition,
+      );
+
+      expect(
+        method,
+        contains('id = ?'),
+      );
+
+      expect(
+        method,
+        contains('deleted_at IS NULL'),
+      );
+
+      expect(
+        method,
+        contains('normalizedId'),
+      );
+    });
+
+    test('rejects missing or already deleted Recipe', () {
+      expect(
+        source,
+        contains('if (updated == 0)'),
       );
 
       expect(
         source,
         contains(
-          'The Recipe record was not found.',
+          'The Recipe record was not found ',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'or was already deleted.',
         ),
       );
     });
 
-    test('relies on database cascade deletion', () {
+    test('does not physically delete Recipe header', () {
       final int deletePosition = source.indexOf(
         'Future<void> deleteRecipe(',
       );
 
-      final int nextMethodPosition = source.indexOf(
+      final int readPosition = source.indexOf(
         'Future<Recipe?> getRecipeById(',
         deletePosition,
       );
 
-      final String method = source.substring(
+      final String deleteMethods = source.substring(
         deletePosition,
-        nextMethodPosition,
+        readPosition,
       );
 
       expect(
-        method,
+        deleteMethods,
         isNot(
-          contains("'recipe_ingredients'"),
+          contains('database.delete('),
         ),
       );
     });

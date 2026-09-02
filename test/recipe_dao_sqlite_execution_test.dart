@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_sync/data/local/daos/recipe_dao.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v5.dart';
+import 'package:kitchen_sync/data/local/migrations/migration_v6.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/domain/models/recipe_ingredient.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -36,6 +37,10 @@ void main() {
           );
 
           for (final String statement in migrationV5) {
+            await db.execute(statement);
+          }
+
+          for (final String statement in migrationV6) {
             await db.execute(statement);
           }
         },
@@ -969,7 +974,134 @@ void main() {
     );
 
     test(
-      'deleteRecipe deletes Recipe header',
+      'softDelete creates a Recipe tombstone',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe recipe = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          recipe,
+        );
+
+        final DateTime deletedAt = DateTime.utc(
+          2026,
+          9,
+          2,
+          6,
+          30,
+        );
+
+        await recipeDao.softDelete(
+          database,
+          recipe.id,
+          updatedBy: 'user-manager',
+          deletedAt: deletedAt,
+        );
+
+        final List<Map<String, Object?>> rows = await database.query(
+          'recipe_master',
+          where: 'id = ?',
+          whereArgs: <Object?>[
+            recipe.id,
+          ],
+        );
+
+        expect(rows, hasLength(1));
+
+        final Map<String, Object?> tombstone = rows.single;
+
+        expect(tombstone['active'], 0);
+
+        expect(
+          tombstone['updated_by'],
+          'user-manager',
+        );
+
+        expect(
+          tombstone['sync_status'],
+          'PENDING',
+        );
+
+        expect(
+          tombstone['updated_at'],
+          deletedAt.toIso8601String(),
+        );
+
+        expect(
+          tombstone['deleted_at'],
+          deletedAt.toIso8601String(),
+        );
+      },
+    );
+
+    test(
+      'normal reads exclude soft-deleted Recipe',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe recipe = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          recipe,
+        );
+
+        await recipeDao.softDelete(
+          database,
+          recipe.id,
+          updatedBy: 'user-manager',
+        );
+
+        final Recipe? loaded = await recipeDao.getRecipeById(
+          database,
+          recipe.id,
+        );
+
+        final List<Recipe> recipes = await recipeDao.getRecipes(
+          database,
+        );
+
+        expect(loaded, isNull);
+        expect(recipes, isEmpty);
+      },
+    );
+
+    test(
+      'softDelete preserves Recipe Ingredient '
+      'lines for synchronization',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe recipe = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          recipe,
+        );
+
+        await recipeDao.softDelete(
+          database,
+          recipe.id,
+          updatedBy: 'user-manager',
+        );
+
+        final List<Map<String, Object?>> lines = await database.query(
+          'recipe_ingredients',
+          where: 'recipe_id = ?',
+          whereArgs: <Object?>[
+            recipe.id,
+          ],
+        );
+
+        expect(lines, hasLength(2));
+      },
+    );
+
+    test(
+      'deleteRecipe delegates to sync-safe '
+      'soft deletion',
       () async {
         await insertSupportingIngredients();
 
@@ -985,7 +1117,7 @@ void main() {
           recipe.id,
         );
 
-        final List<Map<String, Object?>> headerRows = await database.query(
+        final List<Map<String, Object?>> rows = await database.query(
           'recipe_master',
           where: 'id = ?',
           whereArgs: <Object?>[
@@ -993,7 +1125,23 @@ void main() {
           ],
         );
 
-        expect(headerRows, isEmpty);
+        expect(rows, hasLength(1));
+        expect(rows.single['active'], 0);
+
+        expect(
+          rows.single['updated_by'],
+          'SYSTEM',
+        );
+
+        expect(
+          rows.single['sync_status'],
+          'PENDING',
+        );
+
+        expect(
+          rows.single['deleted_at'],
+          isNotNull,
+        );
 
         final Recipe? loaded = await recipeDao.getRecipeById(
           database,
@@ -1005,8 +1153,62 @@ void main() {
     );
 
     test(
-      'deleteRecipe cascade-deletes '
-      'Ingredient lines',
+      'softDelete rejects blank Recipe ID',
+      () async {
+        await expectLater(
+          recipeDao.softDelete(
+            database,
+            '   ',
+            updatedBy: 'user-manager',
+          ),
+          throwsA(
+            isA<FormatException>(),
+          ),
+        );
+      },
+    );
+
+    test(
+      'softDelete rejects blank Updated By',
+      () async {
+        await expectLater(
+          recipeDao.softDelete(
+            database,
+            'recipe-adobo',
+            updatedBy: '   ',
+          ),
+          throwsA(
+            isA<FormatException>(),
+          ),
+        );
+      },
+    );
+
+    test(
+      'softDelete rejects unknown Recipe ID',
+      () async {
+        await expectLater(
+          recipeDao.softDelete(
+            database,
+            'recipe-not-found',
+            updatedBy: 'user-manager',
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) {
+                return error.message;
+              },
+              'message',
+              'The Recipe record was not found '
+                  'or was already deleted.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'softDelete rejects a second deletion',
       () async {
         await insertSupportingIngredients();
 
@@ -1017,76 +1219,28 @@ void main() {
           recipe,
         );
 
-        final List<Map<String, Object?>> rowsBeforeDelete =
-            await database.query(
-          'recipe_ingredients',
-          where: 'recipe_id = ?',
-          whereArgs: <Object?>[
-            recipe.id,
-          ],
-        );
-
-        expect(
-          rowsBeforeDelete,
-          hasLength(2),
-        );
-
-        await recipeDao.deleteRecipe(
+        await recipeDao.softDelete(
           database,
           recipe.id,
+          updatedBy: 'user-manager',
         );
 
-        final List<Map<String, Object?>> rowsAfterDelete = await database.query(
-          'recipe_ingredients',
-          where: 'recipe_id = ?',
-          whereArgs: <Object?>[
+        await expectLater(
+          recipeDao.softDelete(
+            database,
             recipe.id,
-          ],
-        );
-
-        expect(rowsAfterDelete, isEmpty);
-      },
-    );
-
-    test(
-      'deleteRecipe rejects blank Recipe ID',
-      () async {
-        await expectLater(
-          recipeDao.deleteRecipe(
-            database,
-            '   ',
+            updatedBy: 'user-manager',
           ),
           throwsA(
-            isA<FormatException>(),
+            isA<StateError>(),
           ),
         );
       },
     );
 
     test(
-      'deleteRecipe rejects unknown Recipe ID',
-      () async {
-        await expectLater(
-          recipeDao.deleteRecipe(
-            database,
-            'recipe-not-found',
-          ),
-          throwsA(
-            isA<StateError>().having(
-              (StateError error) {
-                return error.message;
-              },
-              'message',
-              'The Recipe record was not found.',
-            ),
-          ),
-        );
-      },
-    );
-
-    test(
-      'deleteRecipe leaves other Recipes '
-      'untouched',
+      'softDelete leaves other Recipes '
+      'available',
       () async {
         await insertSupportingIngredients();
 
@@ -1120,9 +1274,10 @@ void main() {
           second,
         );
 
-        await recipeDao.deleteRecipe(
+        await recipeDao.softDelete(
           database,
           first.id,
+          updatedBy: 'user-manager',
         );
 
         final Recipe? deleted = await recipeDao.getRecipeById(
@@ -1137,10 +1292,12 @@ void main() {
 
         expect(deleted, isNull);
         expect(remaining, isNotNull);
+
         expect(
           remaining!.recipeName,
           'Second Recipe',
         );
+
         expect(
           remaining.ingredients,
           hasLength(1),
@@ -1149,8 +1306,8 @@ void main() {
     );
 
     test(
-      'deleteRecipe does not delete '
-      'Ingredient Master records',
+      'softDelete keeps Ingredient Master '
+      'records unchanged',
       () async {
         await insertSupportingIngredients();
 
@@ -1161,9 +1318,10 @@ void main() {
           recipe,
         );
 
-        await recipeDao.deleteRecipe(
+        await recipeDao.softDelete(
           database,
           recipe.id,
+          updatedBy: 'user-manager',
         );
 
         final List<Map<String, Object?>> ingredientRows = await database.query(

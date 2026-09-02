@@ -1,4 +1,5 @@
 import 'package:kitchen_sync/domain/models/recipe_ingredient.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 
 enum RecipeCategory {
   mainDish,
@@ -19,7 +20,16 @@ class Recipe {
   final bool active;
   final List<RecipeIngredient> ingredients;
 
-  const Recipe({
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? createdBy;
+  final String? updatedBy;
+
+  final MasterSyncStatus syncStatus;
+  final int serverVersion;
+  final DateTime? deletedAt;
+
+  Recipe({
     required this.id,
     required this.recipeCode,
     required this.recipeName,
@@ -28,15 +38,51 @@ class Recipe {
     required this.yieldUnitCode,
     required this.active,
     required this.ingredients,
-  });
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    this.createdBy,
+    this.updatedBy,
+    this.syncStatus = MasterSyncStatus.pending,
+    this.serverVersion = 0,
+    this.deletedAt,
+  })  : createdAt = createdAt ?? _epochUtc(),
+        updatedAt = updatedAt ?? createdAt ?? _epochUtc();
+
+  bool get isDeleted {
+    return deletedAt != null;
+  }
+
+  double get totalRecipeCost {
+    return ingredients.fold(
+      0,
+      (
+        double total,
+        RecipeIngredient ingredient,
+      ) {
+        return total + ingredient.extendedCost;
+      },
+    );
+  }
+
+  double get costPerServing {
+    if (yieldQuantity <= 0) {
+      return 0;
+    }
+
+    return totalRecipeCost / yieldQuantity;
+  }
 
   void validate() {
     if (id.trim().isEmpty) {
-      throw const FormatException('Recipe ID is required.');
+      throw const FormatException(
+        'Recipe ID is required.',
+      );
     }
 
     if (recipeCode.trim().isEmpty) {
-      throw const FormatException('Recipe Code is required.');
+      throw const FormatException(
+        'Recipe Code is required.',
+      );
     }
 
     if (recipeName.trim().isEmpty) {
@@ -54,6 +100,18 @@ class Recipe {
     if (yieldUnitCode.trim().isEmpty) {
       throw const FormatException(
         'Yield Unit is required.',
+      );
+    }
+
+    if (serverVersion < 0) {
+      throw const FormatException(
+        'Server version must be zero or greater.',
+      );
+    }
+
+    if (deletedAt != null && active) {
+      throw const FormatException(
+        'A deleted Recipe cannot remain active.',
       );
     }
 
@@ -84,31 +142,88 @@ class Recipe {
     validate();
 
     return <String, Object?>{
-      'id': id,
-      'recipe_code': recipeCode,
-      'recipe_name': recipeName,
+      'id': id.trim(),
+      'recipe_code': recipeCode.trim().toUpperCase(),
+      'recipe_name': recipeName.trim(),
       'category': category.name,
       'yield_quantity': yieldQuantity,
-      'yield_unit_code': yieldUnitCode,
+      'yield_unit_code': yieldUnitCode.trim().toUpperCase(),
       'active': active ? 1 : 0,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
+      'created_by': _optionalString(createdBy),
+      'updated_by': _optionalString(updatedBy),
+      'sync_status': masterSyncStatusToStorage(
+        syncStatus,
+      ),
+      'server_version': serverVersion,
+      'deleted_at': deletedAt?.toUtc().toIso8601String(),
     };
   }
 
   factory Recipe.fromSqlite(
     Map<String, Object?> map,
   ) {
-    return Recipe(
-      id: map['id'].toString(),
-      recipeCode: map['recipe_code'].toString(),
-      recipeName: map['recipe_name'].toString(),
-      category: RecipeCategory.values.firstWhere(
-        (value) => value.name == map['category'],
+    final Recipe recipe = Recipe(
+      id: _requiredString(
+        map['id'],
+        'id',
       ),
-      yieldQuantity: (map['yield_quantity'] as num).toDouble(),
-      yieldUnitCode: map['yield_unit_code'].toString(),
-      active: (map['active'] as int) == 1,
-      ingredients: const [],
+      recipeCode: _requiredString(
+        map['recipe_code'],
+        'recipe_code',
+      ).toUpperCase(),
+      recipeName: _requiredString(
+        map['recipe_name'],
+        'recipe_name',
+      ),
+      category: _recipeCategoryFromStorage(
+        _requiredString(
+          map['category'],
+          'category',
+        ),
+      ),
+      yieldQuantity: _positiveNumber(
+        map['yield_quantity'],
+        'yield_quantity',
+      ),
+      yieldUnitCode: _requiredString(
+        map['yield_unit_code'],
+        'yield_unit_code',
+      ).toUpperCase(),
+      active: _sqliteBool(
+        map['active'],
+        'active',
+      ),
+      ingredients: const <RecipeIngredient>[],
+      createdAt: _requiredDateTime(
+        map['created_at'] ?? '1970-01-01T00:00:00.000Z',
+        'created_at',
+      ),
+      updatedAt: _requiredDateTime(
+        map['updated_at'] ?? map['created_at'] ?? '1970-01-01T00:00:00.000Z',
+        'updated_at',
+      ),
+      createdBy: _optionalString(
+        map['created_by'],
+      ),
+      updatedBy: _optionalString(
+        map['updated_by'],
+      ),
+      syncStatus: masterSyncStatusFromStorage(
+        map['sync_status']?.toString() ?? 'PENDING',
+      ),
+      serverVersion: _nonNegativeInteger(
+        map['server_version'] ?? 0,
+        'server_version',
+      ),
+      deletedAt: _optionalDateTime(
+        map['deleted_at'],
+      ),
     );
+
+    recipe.validate();
+    return recipe;
   }
 
   Recipe copyWith({
@@ -120,6 +235,16 @@ class Recipe {
     String? yieldUnitCode,
     bool? active,
     List<RecipeIngredient>? ingredients,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? createdBy,
+    bool clearCreatedBy = false,
+    String? updatedBy,
+    bool clearUpdatedBy = false,
+    MasterSyncStatus? syncStatus,
+    int? serverVersion,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -130,23 +255,146 @@ class Recipe {
       yieldUnitCode: yieldUnitCode ?? this.yieldUnitCode,
       active: active ?? this.active,
       ingredients: ingredients ?? this.ingredients,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      createdBy: clearCreatedBy ? null : createdBy ?? this.createdBy,
+      updatedBy: clearUpdatedBy ? null : updatedBy ?? this.updatedBy,
+      syncStatus: syncStatus ?? this.syncStatus,
+      serverVersion: serverVersion ?? this.serverVersion,
+      deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
+    );
+  }
+}
+
+DateTime _epochUtc() {
+  return DateTime.fromMillisecondsSinceEpoch(
+    0,
+    isUtc: true,
+  );
+}
+
+RecipeCategory _recipeCategoryFromStorage(
+  String value,
+) {
+  return RecipeCategory.values.firstWhere(
+    (RecipeCategory category) {
+      return category.name == value.trim();
+    },
+    orElse: () {
+      throw FormatException(
+        'Unsupported Recipe category: $value',
+      );
+    },
+  );
+}
+
+String _requiredString(
+  Object? value,
+  String fieldName,
+) {
+  final String result = value?.toString().trim() ?? '';
+
+  if (result.isEmpty) {
+    throw FormatException(
+      '$fieldName is required.',
     );
   }
 
-  double get totalRecipeCost {
-    return ingredients.fold(
-      0,
-      (double total, RecipeIngredient ingredient) {
-        return total + ingredient.extendedCost;
-      },
+  return result;
+}
+
+String? _optionalString(Object? value) {
+  final String result = value?.toString().trim() ?? '';
+
+  return result.isEmpty ? null : result;
+}
+
+double _positiveNumber(
+  Object? value,
+  String fieldName,
+) {
+  final double? number = value is num
+      ? value.toDouble()
+      : double.tryParse(
+          value?.toString() ?? '',
+        );
+
+  if (number == null || !number.isFinite || number <= 0) {
+    throw FormatException(
+      '$fieldName must be greater than zero.',
     );
   }
 
-  double get costPerServing {
-    if (yieldQuantity <= 0) {
-      return 0;
-    }
+  return number;
+}
 
-    return totalRecipeCost / yieldQuantity;
+int _nonNegativeInteger(
+  Object? value,
+  String fieldName,
+) {
+  final int? number = value is int
+      ? value
+      : int.tryParse(
+          value?.toString() ?? '',
+        );
+
+  if (number == null || number < 0) {
+    throw FormatException(
+      '$fieldName must be zero or greater.',
+    );
   }
+
+  return number;
+}
+
+bool _sqliteBool(
+  Object? value,
+  String fieldName,
+) {
+  if (value == 1 || value == true) {
+    return true;
+  }
+
+  if (value == 0 || value == false) {
+    return false;
+  }
+
+  throw FormatException(
+    '$fieldName must be 0 or 1.',
+  );
+}
+
+DateTime _requiredDateTime(
+  Object? value,
+  String fieldName,
+) {
+  final DateTime? date = DateTime.tryParse(
+    value?.toString() ?? '',
+  );
+
+  if (date == null) {
+    throw FormatException(
+      '$fieldName must be a valid date.',
+    );
+  }
+
+  return date;
+}
+
+DateTime? _optionalDateTime(Object? value) {
+  final String result = value?.toString().trim() ?? '';
+
+  if (result.isEmpty) {
+    return null;
+  }
+
+  final DateTime? date = DateTime.tryParse(result);
+
+  if (date == null) {
+    throw const FormatException(
+      'The optional date must be a valid date.',
+    );
+  }
+
+  return date;
 }

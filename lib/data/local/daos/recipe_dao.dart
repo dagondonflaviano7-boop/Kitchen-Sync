@@ -99,7 +99,22 @@ class RecipeDao {
     DatabaseExecutor database,
     String recipeId,
   ) async {
+    await softDelete(
+      database,
+      recipeId,
+      updatedBy: 'SYSTEM',
+    );
+  }
+
+  Future<void> softDelete(
+    DatabaseExecutor database,
+    String recipeId, {
+    required String updatedBy,
+    DateTime? deletedAt,
+  }) async {
     final String normalizedId = recipeId.trim();
+
+    final String normalizedUserId = updatedBy.trim();
 
     if (normalizedId.isEmpty) {
       throw const FormatException(
@@ -107,17 +122,37 @@ class RecipeDao {
       );
     }
 
-    final int deleted = await database.delete(
+    if (normalizedUserId.isEmpty) {
+      throw const FormatException(
+        'Updated By is required.',
+      );
+    }
+
+    final String timestamp =
+        (deletedAt ?? DateTime.now()).toUtc().toIso8601String();
+
+    final int updated = await database.update(
       'recipe_master',
-      where: 'id = ?',
+      <String, Object?>{
+        'active': 0,
+        'updated_at': timestamp,
+        'updated_by': normalizedUserId,
+        'sync_status': 'PENDING',
+        'deleted_at': timestamp,
+      },
+      where: '''
+        id = ?
+        AND deleted_at IS NULL
+      ''',
       whereArgs: <Object?>[
         normalizedId,
       ],
     );
 
-    if (deleted == 0) {
+    if (updated == 0) {
       throw StateError(
-        'The Recipe record was not found.',
+        'The Recipe record was not found '
+        'or was already deleted.',
       );
     }
   }
@@ -136,7 +171,10 @@ class RecipeDao {
 
     final List<Map<String, Object?>> headerRows = await database.query(
       'recipe_master',
-      where: 'id = ?',
+      where: '''
+        id = ?
+        AND deleted_at IS NULL
+      ''',
       whereArgs: <Object?>[
         normalizedId,
       ],
@@ -164,6 +202,7 @@ class RecipeDao {
   ) async {
     final List<Map<String, Object?>> headerRows = await database.query(
       'recipe_master',
+      where: 'deleted_at IS NULL',
       orderBy: '''
         recipe_name COLLATE NOCASE,
         recipe_code

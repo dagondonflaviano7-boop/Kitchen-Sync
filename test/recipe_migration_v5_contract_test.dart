@@ -10,10 +10,10 @@ void main() {
   });
 
   group('Recipe Migration V5', () {
-    test('uses database version 5', () {
+    test('Migration V5 remains included in the current database version', () {
       expect(
         AppConstants.databaseVersion,
-        5,
+        greaterThanOrEqualTo(5),
       );
     });
 
