@@ -4,9 +4,15 @@ import 'package:kitchen_sync/data/local/migrations/migration_v4.dart';
 
 void main() {
   group('Migration V4 contract', () {
-    test('database version is four', () {
-      expect(AppConstants.databaseVersion, 4);
-    });
+    test(
+      'Migration V4 remains included in the current database version',
+      () {
+        expect(
+          AppConstants.databaseVersion,
+          greaterThanOrEqualTo(4),
+        );
+      },
+    );
 
     test('adds Ingredient audit and synchronization columns', () {
       final String migration = migrationV4.join('\n');

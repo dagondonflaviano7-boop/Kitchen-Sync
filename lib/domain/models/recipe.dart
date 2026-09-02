@@ -40,7 +40,43 @@ class Recipe {
     }
 
     if (recipeName.trim().isEmpty) {
-      throw const FormatException('Recipe Name is required.');
+      throw const FormatException(
+        'Recipe Name is required.',
+      );
+    }
+
+    if (!yieldQuantity.isFinite || yieldQuantity <= 0) {
+      throw const FormatException(
+        'Yield Quantity must be greater than zero.',
+      );
+    }
+
+    if (yieldUnitCode.trim().isEmpty) {
+      throw const FormatException(
+        'Yield Unit is required.',
+      );
+    }
+
+    final Set<String> ingredientIds = <String>{};
+
+    for (final RecipeIngredient ingredient in ingredients) {
+      ingredient.validate();
+
+      if (ingredient.recipeId.trim() != id.trim()) {
+        throw const FormatException(
+          'Every Recipe Ingredient must belong '
+          'to the Recipe being saved.',
+        );
+      }
+
+      final String ingredientId = ingredient.ingredientId.trim();
+
+      if (!ingredientIds.add(ingredientId)) {
+        throw const FormatException(
+          'The same Ingredient cannot be added '
+          'to a Recipe more than once.',
+        );
+      }
     }
   }
 
