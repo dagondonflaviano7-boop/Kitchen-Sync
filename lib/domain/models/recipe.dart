@@ -13,14 +13,10 @@ class Recipe {
   final String id;
   final String recipeCode;
   final String recipeName;
-
   final RecipeCategory category;
-
   final double yieldQuantity;
   final String yieldUnitCode;
-
   final bool active;
-
   final List<RecipeIngredient> ingredients;
 
   const Recipe({
@@ -34,13 +30,77 @@ class Recipe {
     required this.ingredients,
   });
 
+  void validate() {
+    if (id.trim().isEmpty) {
+      throw const FormatException('Recipe ID is required.');
+    }
+
+    if (recipeCode.trim().isEmpty) {
+      throw const FormatException('Recipe Code is required.');
+    }
+
+    if (recipeName.trim().isEmpty) {
+      throw const FormatException('Recipe Name is required.');
+    }
+  }
+
+  Map<String, Object?> toSqlite() {
+    validate();
+
+    return <String, Object?>{
+      'id': id,
+      'recipe_code': recipeCode,
+      'recipe_name': recipeName,
+      'category': category.name,
+      'yield_quantity': yieldQuantity,
+      'yield_unit_code': yieldUnitCode,
+      'active': active ? 1 : 0,
+    };
+  }
+
+  factory Recipe.fromSqlite(
+    Map<String, Object?> map,
+  ) {
+    return Recipe(
+      id: map['id'].toString(),
+      recipeCode: map['recipe_code'].toString(),
+      recipeName: map['recipe_name'].toString(),
+      category: RecipeCategory.values.firstWhere(
+        (value) => value.name == map['category'],
+      ),
+      yieldQuantity: (map['yield_quantity'] as num).toDouble(),
+      yieldUnitCode: map['yield_unit_code'].toString(),
+      active: (map['active'] as int) == 1,
+      ingredients: const [],
+    );
+  }
+
+  Recipe copyWith({
+    String? id,
+    String? recipeCode,
+    String? recipeName,
+    RecipeCategory? category,
+    double? yieldQuantity,
+    String? yieldUnitCode,
+    bool? active,
+    List<RecipeIngredient>? ingredients,
+  }) {
+    return Recipe(
+      id: id ?? this.id,
+      recipeCode: recipeCode ?? this.recipeCode,
+      recipeName: recipeName ?? this.recipeName,
+      category: category ?? this.category,
+      yieldQuantity: yieldQuantity ?? this.yieldQuantity,
+      yieldUnitCode: yieldUnitCode ?? this.yieldUnitCode,
+      active: active ?? this.active,
+      ingredients: ingredients ?? this.ingredients,
+    );
+  }
+
   double get totalRecipeCost {
     return ingredients.fold(
       0,
-      (
-        double total,
-        RecipeIngredient ingredient,
-      ) {
+      (double total, RecipeIngredient ingredient) {
         return total + ingredient.extendedCost;
       },
     );
