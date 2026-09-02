@@ -41,9 +41,57 @@ class RecipeDao {
     DatabaseExecutor database,
     Recipe recipe,
   ) async {
-    throw UnimplementedError(
-      'Recipe update will be implemented '
-      'after insertRecipe validation.',
+    recipe.validate();
+
+    final List<Map<String, Object?>> existingRows = await database.query(
+      'recipe_master',
+      columns: const <String>['id'],
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        recipe.id.trim(),
+      ],
+      limit: 1,
+    );
+
+    if (existingRows.isEmpty) {
+      throw StateError(
+        'The Recipe record was not found.',
+      );
+    }
+
+    final Batch batch = database.batch();
+
+    batch.update(
+      'recipe_master',
+      recipe.toSqlite(),
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        recipe.id.trim(),
+      ],
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+
+    batch.delete(
+      'recipe_ingredients',
+      where: 'recipe_id = ?',
+      whereArgs: <Object?>[
+        recipe.id.trim(),
+      ],
+    );
+
+    for (final RecipeIngredient ingredient in recipe.ingredients) {
+      ingredient.validate();
+
+      batch.insert(
+        'recipe_ingredients',
+        ingredient.toSqlite(),
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+    }
+
+    await batch.commit(
+      noResult: true,
+      continueOnError: false,
     );
   }
 

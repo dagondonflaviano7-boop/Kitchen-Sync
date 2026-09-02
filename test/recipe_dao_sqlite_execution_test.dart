@@ -582,5 +582,390 @@ void main() {
         );
       },
     );
+
+    test(
+      'updateRecipe updates Recipe header',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe updated = original.copyWith(
+          recipeName: 'Special Chicken Adobo',
+          category: RecipeCategory.sauce,
+          yieldQuantity: 20,
+          yieldUnitCode: 'PORTION',
+          active: false,
+        );
+
+        await recipeDao.updateRecipe(
+          database,
+          updated,
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          original.id,
+        ))!;
+
+        expect(
+          loaded.recipeName,
+          'Special Chicken Adobo',
+        );
+
+        expect(
+          loaded.category,
+          RecipeCategory.sauce,
+        );
+
+        expect(
+          loaded.yieldQuantity,
+          20,
+        );
+
+        expect(
+          loaded.yieldUnitCode,
+          'PORTION',
+        );
+
+        expect(loaded.active, isFalse);
+      },
+    );
+
+    test(
+      'updateRecipe removes old lines and '
+      'inserts replacement lines',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe updated = original.copyWith(
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-updated-chicken',
+              recipeId: 'recipe-adobo',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 800,
+              costPerUsageUnit: 0.30,
+            ),
+          ],
+        );
+
+        await recipeDao.updateRecipe(
+          database,
+          updated,
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          original.id,
+        ))!;
+
+        expect(
+          loaded.ingredients,
+          hasLength(1),
+        );
+
+        expect(
+          loaded.ingredients.single.id,
+          'line-updated-chicken',
+        );
+
+        expect(
+          loaded.ingredients.single.quantityRequired,
+          800,
+        );
+
+        expect(
+          loaded.ingredients.single.costPerUsageUnit,
+          0.30,
+        );
+
+        final List<Map<String, Object?>> oldRows = await database.query(
+          'recipe_ingredients',
+          where: 'id IN (?, ?)',
+          whereArgs: const <Object?>[
+            'line-chicken',
+            'line-soy-sauce',
+          ],
+        );
+
+        expect(oldRows, isEmpty);
+      },
+    );
+
+    test(
+      'updateRecipe recalculates Recipe costs',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe updated = original.copyWith(
+          yieldQuantity: 20,
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-cost-update',
+              recipeId: 'recipe-adobo',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 1000,
+              costPerUsageUnit: 0.30,
+            ),
+          ],
+        );
+
+        await recipeDao.updateRecipe(
+          database,
+          updated,
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          updated.id,
+        ))!;
+
+        expect(
+          loaded.totalRecipeCost,
+          300,
+        );
+
+        expect(
+          loaded.costPerServing,
+          15,
+        );
+      },
+    );
+
+    test(
+      'updateRecipe rejects unknown Recipe ID',
+      () async {
+        final Recipe unknown = buildRecipe(
+          id: 'recipe-unknown',
+          recipeCode: 'RCP-UNKNOWN-001',
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-unknown',
+              recipeId: 'recipe-unknown',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 100,
+              costPerUsageUnit: 0.25,
+            ),
+          ],
+        );
+
+        await expectLater(
+          recipeDao.updateRecipe(
+            database,
+            unknown,
+          ),
+          throwsA(
+            isA<StateError>(),
+          ),
+        );
+      },
+    );
+
+    test(
+      'updateRecipe rejects duplicate '
+      'Recipe code',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe first = buildRecipe();
+
+        final Recipe second = buildRecipe(
+          id: 'recipe-second',
+          recipeCode: 'RCP-SECOND-001',
+          recipeName: 'Second Recipe',
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-second',
+              recipeId: 'recipe-second',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 100,
+              costPerUsageUnit: 0.25,
+            ),
+          ],
+        );
+
+        await recipeDao.insertRecipe(
+          database,
+          first,
+        );
+
+        await recipeDao.insertRecipe(
+          database,
+          second,
+        );
+
+        final Recipe duplicateCode = second.copyWith(
+          recipeCode: first.recipeCode,
+        );
+
+        await expectLater(
+          recipeDao.updateRecipe(
+            database,
+            duplicateCode,
+          ),
+          throwsA(
+            isA<DatabaseException>(),
+          ),
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          second.id,
+        ))!;
+
+        expect(
+          loaded.recipeCode,
+          'RCP-SECOND-001',
+        );
+
+        expect(
+          loaded.recipeName,
+          'Second Recipe',
+        );
+      },
+    );
+
+    test(
+      'updateRecipe rolls back header and '
+      'lines after foreign-key failure',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe invalidUpdate = original.copyWith(
+          recipeName: 'This Must Not Be Saved',
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-invalid-update',
+              recipeId: 'recipe-adobo',
+              ingredientId: 'ingredient-not-found',
+              ingredientSku: 'ING-MISSING-001',
+              ingredientName: 'Missing Ingredient',
+              usageUnitCode: 'G',
+              quantityRequired: 100,
+              costPerUsageUnit: 0.10,
+            ),
+          ],
+        );
+
+        await expectLater(
+          recipeDao.updateRecipe(
+            database,
+            invalidUpdate,
+          ),
+          throwsA(
+            isA<DatabaseException>(),
+          ),
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          original.id,
+        ))!;
+
+        expect(
+          loaded.recipeName,
+          original.recipeName,
+        );
+
+        expect(
+          loaded.ingredients,
+          hasLength(2),
+        );
+
+        expect(
+          loaded.totalRecipeCost,
+          145,
+        );
+      },
+    );
+
+    test(
+      'updateRecipe validates line ownership '
+      'before changing SQLite',
+      () async {
+        await insertSupportingIngredients();
+
+        final Recipe original = buildRecipe();
+
+        await recipeDao.insertRecipe(
+          database,
+          original,
+        );
+
+        final Recipe invalidOwnership = original.copyWith(
+          ingredients: const <RecipeIngredient>[
+            RecipeIngredient(
+              id: 'line-wrong-owner',
+              recipeId: 'a-different-recipe',
+              ingredientId: 'ingredient-chicken',
+              ingredientSku: 'ING-CHICKEN-001',
+              ingredientName: 'Chicken',
+              usageUnitCode: 'G',
+              quantityRequired: 100,
+              costPerUsageUnit: 0.25,
+            ),
+          ],
+        );
+
+        await expectLater(
+          recipeDao.updateRecipe(
+            database,
+            invalidOwnership,
+          ),
+          throwsA(
+            isA<FormatException>(),
+          ),
+        );
+
+        final Recipe loaded = (await recipeDao.getRecipeById(
+          database,
+          original.id,
+        ))!;
+
+        expect(
+          loaded.ingredients,
+          hasLength(2),
+        );
+      },
+    );
   });
 }

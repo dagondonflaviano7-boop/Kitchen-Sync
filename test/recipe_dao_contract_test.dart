@@ -179,4 +179,80 @@ void main() {
       );
     });
   });
+
+  group('RecipeDao update implementation', () {
+    test('validates Recipe before update', () {
+      final int updatePosition = source.indexOf(
+        'Future<void> updateRecipe(',
+      );
+
+      final int validationPosition = source.indexOf(
+        'recipe.validate()',
+        updatePosition,
+      );
+
+      expect(
+        validationPosition,
+        greaterThan(updatePosition),
+      );
+    });
+
+    test('checks that Recipe exists', () {
+      expect(
+        source,
+        contains(
+          'The Recipe record was not found.',
+        ),
+      );
+    });
+
+    test('updates Recipe Master header', () {
+      expect(
+        source,
+        contains('batch.update('),
+      );
+
+      expect(
+        source,
+        contains("'recipe_master'"),
+      );
+    });
+
+    test('deletes previous Ingredient lines', () {
+      expect(
+        source,
+        contains('batch.delete('),
+      );
+
+      expect(
+        source,
+        contains("'recipe_ingredients'"),
+      );
+    });
+
+    test('inserts replacement lines', () {
+      expect(
+        source,
+        contains('ingredient.toSqlite()'),
+      );
+    });
+
+    test('uses abort conflict handling', () {
+      expect(
+        source,
+        contains(
+          'ConflictAlgorithm.abort',
+        ),
+      );
+    });
+
+    test('stops the update on any error', () {
+      expect(
+        source,
+        contains(
+          'continueOnError: false',
+        ),
+      );
+    });
+  });
 }
