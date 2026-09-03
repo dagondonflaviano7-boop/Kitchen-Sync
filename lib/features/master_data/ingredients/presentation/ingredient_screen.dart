@@ -958,36 +958,39 @@ class _IngredientScreenState extends State<IngredientScreen> {
                 },
               ),
               const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SegmentedButton<IngredientStatusFilter>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment<IngredientStatusFilter>(
-                      value: IngredientStatusFilter.all,
-                      label: Text('All'),
-                    ),
-                    ButtonSegment<IngredientStatusFilter>(
-                      value: IngredientStatusFilter.active,
-                      label: Text('Active'),
-                    ),
-                    ButtonSegment<IngredientStatusFilter>(
-                      value: IngredientStatusFilter.inactive,
-                      label: Text('Inactive'),
-                    ),
-                  ],
-                  selected: <IngredientStatusFilter>{
-                    _statusFilter,
-                  },
-                  onSelectionChanged: (
-                    Set<IngredientStatusFilter> selection,
-                  ) {
-                    setState(() {
-                      _statusFilter = selection.first;
-                    });
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<IngredientStatusFilter>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<IngredientStatusFilter>(
+                        value: IngredientStatusFilter.all,
+                        label: Text('All'),
+                      ),
+                      ButtonSegment<IngredientStatusFilter>(
+                        value: IngredientStatusFilter.active,
+                        label: Text('Active'),
+                      ),
+                      ButtonSegment<IngredientStatusFilter>(
+                        value: IngredientStatusFilter.inactive,
+                        label: Text('Inactive'),
+                      ),
+                    ],
+                    selected: <IngredientStatusFilter>{
+                      _statusFilter,
+                    },
+                    onSelectionChanged: (
+                      Set<IngredientStatusFilter> selection,
+                    ) {
+                      setState(() {
+                        _statusFilter = selection.first;
+                      });
 
-                    _applyFilters();
-                  },
+                      _applyFilters();
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
