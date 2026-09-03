@@ -157,6 +157,83 @@ class RecipeDao {
     }
   }
 
+  Future<Recipe?> findByIdIncludingDeleted(
+    DatabaseExecutor database,
+    String recipeId,
+  ) async {
+    final String normalizedId = recipeId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Recipe ID is required.',
+      );
+    }
+
+    final List<Map<String, Object?>> headerRows = await database.query(
+      'recipe_master',
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+      limit: 1,
+    );
+
+    if (headerRows.isEmpty) {
+      return null;
+    }
+
+    final List<RecipeIngredient> ingredients = await _getIngredientsByRecipeId(
+      database,
+      normalizedId,
+    );
+
+    return Recipe.fromSqlite(
+      headerRows.first,
+    ).copyWith(
+      ingredients: ingredients,
+    );
+  }
+
+  Future<bool> recipeCodeExists(
+    DatabaseExecutor database,
+    String recipeCode, {
+    String? excludingId,
+  }) async {
+    final String normalizedCode = recipeCode.trim().toUpperCase();
+
+    if (normalizedCode.isEmpty) {
+      throw const FormatException(
+        'Recipe Code is required.',
+      );
+    }
+
+    String where = '''
+      recipe_code = ?
+      AND deleted_at IS NULL
+    ''';
+
+    final List<Object?> arguments = <Object?>[
+      normalizedCode,
+    ];
+
+    final String excludedId = excludingId?.trim() ?? '';
+
+    if (excludedId.isNotEmpty) {
+      where = '$where AND id != ?';
+      arguments.add(excludedId);
+    }
+
+    final List<Map<String, Object?>> rows = await database.query(
+      'recipe_master',
+      columns: const <String>['id'],
+      where: where,
+      whereArgs: arguments,
+      limit: 1,
+    );
+
+    return rows.isNotEmpty;
+  }
+
   Future<Recipe?> getRecipeById(
     DatabaseExecutor database,
     String recipeId,
