@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kitchen_sync/data/services/master_data_sync_service.dart';
 import 'package:kitchen_sync/features/master_data/ingredients/presentation/ingredient_screen.dart';
+import 'package:kitchen_sync/features/master_data/recipes/presentation/recipe_screen.dart';
 import 'package:kitchen_sync/features/master_data/suppliers/presentation/supplier_screen.dart';
 import 'package:kitchen_sync/features/master_data/units/presentation/unit_of_measure_screen.dart';
 
@@ -223,6 +224,23 @@ class _MasterDataHubState extends State<MasterDataHub> {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
                                   builder: (_) => IngredientScreen(
+                                    currentUserId: widget.currentUserId,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          _MasterDataCard(
+                            title: 'Recipe Master',
+                            subtitle: 'Manage Recipes, Ingredients, yields, '
+                                'and cost per serving.',
+                            icon: Icons.menu_book_outlined,
+                            color: const Color(0xFF7C3AED),
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => RecipeScreen(
                                     currentUserId: widget.currentUserId,
                                   ),
                                 ),
