@@ -1,4 +1,5 @@
 import 'package:kitchen_sync/domain/models/recipe.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:kitchen_sync/domain/models/recipe_ingredient.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -306,6 +307,185 @@ class RecipeDao {
 
     return List<Recipe>.unmodifiable(
       recipes,
+    );
+  }
+
+  Future<List<Recipe>> findPending(
+    DatabaseExecutor database, {
+    int limit = 100,
+  }) async {
+    if (limit < 1) {
+      throw const FormatException(
+        'Pending synchronization limit '
+        'must be greater than zero.',
+      );
+    }
+
+    final List<Map<String, Object?>> headerRows = await database.query(
+      'recipe_master',
+      where: 'sync_status IN (?, ?)',
+      whereArgs: const <Object?>[
+        'PENDING',
+        'ERROR',
+      ],
+      orderBy: 'updated_at, id',
+      limit: limit,
+    );
+
+    final List<Recipe> recipes = <Recipe>[];
+
+    for (final Map<String, Object?> header in headerRows) {
+      final Recipe recipe = Recipe.fromSqlite(header);
+
+      final List<RecipeIngredient> ingredients =
+          await _getIngredientsByRecipeId(
+        database,
+        recipe.id,
+      );
+
+      recipes.add(
+        recipe.copyWith(
+          ingredients: ingredients,
+        ),
+      );
+    }
+
+    return List<Recipe>.unmodifiable(
+      recipes,
+    );
+  }
+
+  Future<void> markSyncing(
+    DatabaseExecutor database,
+    String recipeId,
+  ) async {
+    await _updateSyncStatus(
+      database,
+      recipeId,
+      MasterSyncStatus.syncing,
+    );
+  }
+
+  Future<void> markSynced(
+    DatabaseExecutor database,
+    String recipeId, {
+    required int serverVersion,
+  }) async {
+    if (serverVersion < 0) {
+      throw const FormatException(
+        'Server version must be zero or greater.',
+      );
+    }
+
+    final String normalizedId = recipeId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Recipe ID is required.',
+      );
+    }
+
+    final int updated = await database.update(
+      'recipe_master',
+      <String, Object?>{
+        'sync_status': 'SYNCED',
+        'server_version': serverVersion,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Recipe record was not found.',
+      );
+    }
+  }
+
+  Future<void> markSyncError(
+    DatabaseExecutor database,
+    String recipeId,
+  ) async {
+    await _updateSyncStatus(
+      database,
+      recipeId,
+      MasterSyncStatus.error,
+    );
+  }
+
+  Future<void> _updateSyncStatus(
+    DatabaseExecutor database,
+    String recipeId,
+    MasterSyncStatus status,
+  ) async {
+    final String normalizedId = recipeId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Recipe ID is required.',
+      );
+    }
+
+    final int updated = await database.update(
+      'recipe_master',
+      <String, Object?>{
+        'sync_status': masterSyncStatusToStorage(status),
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Recipe record was not found.',
+      );
+    }
+  }
+
+  Future<void> upsertRemote(
+    Database database,
+    Recipe recipe,
+  ) async {
+    recipe.validate();
+
+    final Recipe synchronized = recipe.copyWith(
+      syncStatus: MasterSyncStatus.synced,
+    );
+
+    await database.transaction(
+      (Transaction transaction) async {
+        await transaction.insert(
+          'recipe_master',
+          synchronized.toSqlite(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        await transaction.delete(
+          'recipe_ingredients',
+          where: 'recipe_id = ?',
+          whereArgs: <Object?>[
+            synchronized.id,
+          ],
+        );
+
+        for (final RecipeIngredient ingredient in synchronized.ingredients) {
+          final RecipeIngredient normalizedLine = ingredient.copyWith(
+            recipeId: synchronized.id,
+          );
+
+          normalizedLine.validate();
+
+          await transaction.insert(
+            'recipe_ingredients',
+            normalizedLine.toSqlite(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      },
     );
   }
 
