@@ -80,11 +80,13 @@ class _MasterDataHubState extends State<MasterDataHub> {
 
       final int uploaded = result.uploadedUnits +
           result.uploadedSuppliers +
-          result.uploadedIngredients;
+          result.uploadedIngredients +
+          result.uploadedRecipes;
 
       final int downloaded = result.downloadedUnits +
           result.downloadedSuppliers +
-          result.downloadedIngredients;
+          result.downloadedIngredients +
+          result.downloadedRecipes;
 
       final String message = result.errors == 0
           ? 'Master data synchronized successfully. '
@@ -255,7 +257,7 @@ class _MasterDataHubState extends State<MasterDataHub> {
                                 ? 'Uploading local changes and '
                                     'downloading Firebase updates.'
                                 : 'Synchronize Units of Measure, '
-                                    'Suppliers, and Ingredients '
+                                    'Suppliers, Ingredients, and Recipes '
                                     'with Firebase.',
                             icon: _syncing
                                 ? Icons.sync

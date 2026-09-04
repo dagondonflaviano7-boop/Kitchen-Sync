@@ -171,7 +171,7 @@ void main() {
       expect(
         hubSource,
         contains(
-          "'Suppliers, and Ingredients '",
+          "'Suppliers, Ingredients, and Recipes '",
         ),
       );
 
