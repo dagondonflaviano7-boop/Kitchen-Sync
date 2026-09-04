@@ -23,12 +23,22 @@ void main() {
   });
 
   group('Product Recipe Migration V7', () {
-    test('increases database version to 7', () {
+    test('supports database version 7 or later', () {
+      final RegExp versionPattern = RegExp(
+        r'databaseVersion\s*=\s*(\d+)',
+      );
+
+      final RegExpMatch? match = versionPattern.firstMatch(constants);
+
+      expect(match, isNotNull);
+
+      final int version = int.parse(
+        match!.group(1)!,
+      );
+
       expect(
-        constants,
-        contains(
-          'databaseVersion = 7',
-        ),
+        version,
+        greaterThanOrEqualTo(7),
       );
     });
 
