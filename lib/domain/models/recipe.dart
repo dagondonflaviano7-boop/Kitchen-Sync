@@ -226,6 +226,122 @@ class Recipe {
     return recipe;
   }
 
+  Map<String, Object?> toFirebase() {
+    validate();
+
+    final Map<String, Object?> ingredientMap = <String, Object?>{};
+
+    for (final RecipeIngredient ingredient in ingredients) {
+      ingredientMap[ingredient.id.trim()] = <String, Object?>{
+        'id': ingredient.id.trim(),
+        'recipeId': id.trim(),
+        'ingredientId': ingredient.ingredientId.trim(),
+        'ingredientSku': ingredient.ingredientSku.trim().toUpperCase(),
+        'ingredientName': ingredient.ingredientName.trim(),
+        'usageUnitCode': ingredient.usageUnitCode.trim().toUpperCase(),
+        'quantityRequired': ingredient.quantityRequired,
+        'costPerUsageUnit': ingredient.costPerUsageUnit,
+      };
+    }
+
+    return <String, Object?>{
+      'id': id.trim(),
+      'recipeCode': recipeCode.trim().toUpperCase(),
+      'recipeName': recipeName.trim(),
+      'category': category.name,
+      'yieldQuantity': yieldQuantity,
+      'yieldUnitCode': yieldUnitCode.trim().toUpperCase(),
+      'active': active,
+      'ingredients': ingredientMap,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'updatedAt': updatedAt.toUtc().toIso8601String(),
+      'createdBy': _optionalString(createdBy),
+      'updatedBy': _optionalString(updatedBy),
+      'syncStatus': masterSyncStatusToStorage(
+        syncStatus,
+      ),
+      'serverVersion': serverVersion,
+      'deletedAt': deletedAt?.toUtc().toIso8601String(),
+    };
+  }
+
+  factory Recipe.fromFirebase(
+    String firebaseId,
+    Map<Object?, Object?> map,
+  ) {
+    final String normalizedId = firebaseId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Recipe Firebase ID is required.',
+      );
+    }
+
+    final List<RecipeIngredient> recipeIngredients =
+        _recipeIngredientsFromFirebase(
+      normalizedId,
+      map['ingredients'],
+    );
+
+    final Recipe recipe = Recipe(
+      id: normalizedId,
+      recipeCode: _requiredString(
+        map['recipeCode'],
+        'recipeCode',
+      ).toUpperCase(),
+      recipeName: _requiredString(
+        map['recipeName'],
+        'recipeName',
+      ),
+      category: _recipeCategoryFromStorage(
+        _requiredString(
+          map['category'],
+          'category',
+        ),
+      ),
+      yieldQuantity: _positiveNumber(
+        map['yieldQuantity'],
+        'yieldQuantity',
+      ),
+      yieldUnitCode: _requiredString(
+        map['yieldUnitCode'],
+        'yieldUnitCode',
+      ).toUpperCase(),
+      active: _firebaseBool(
+        map['active'],
+        'active',
+      ),
+      ingredients: recipeIngredients,
+      createdAt: _requiredDateTime(
+        map['createdAt'],
+        'createdAt',
+      ),
+      updatedAt: _requiredDateTime(
+        map['updatedAt'],
+        'updatedAt',
+      ),
+      createdBy: _optionalString(
+        map['createdBy'],
+      ),
+      updatedBy: _optionalString(
+        map['updatedBy'],
+      ),
+      syncStatus: masterSyncStatusFromStorage(
+        map['syncStatus']?.toString() ?? 'SYNCED',
+      ),
+      serverVersion: _nonNegativeInteger(
+        map['serverVersion'] ?? 0,
+        'serverVersion',
+      ),
+      deletedAt: _optionalDateTime(
+        map['deletedAt'],
+      ),
+    );
+
+    recipe.validate();
+    return recipe;
+  }
+
   Recipe copyWith({
     String? id,
     String? recipeCode,
@@ -264,6 +380,127 @@ class Recipe {
       deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
     );
   }
+}
+
+List<RecipeIngredient> _recipeIngredientsFromFirebase(
+  String recipeId,
+  Object? value,
+) {
+  if (value == null) {
+    return const <RecipeIngredient>[];
+  }
+
+  if (value is! Map) {
+    throw const FormatException(
+      'Recipe Ingredients must be a map.',
+    );
+  }
+
+  final Map<Object?, Object?> records = Map<Object?, Object?>.from(value);
+
+  final List<RecipeIngredient> result = <RecipeIngredient>[];
+
+  final Set<String> lineIds = <String>{};
+
+  for (final MapEntry<Object?, Object?> entry in records.entries) {
+    final Object? rawLine = entry.value;
+
+    if (rawLine is! Map) {
+      throw const FormatException(
+        'Every Recipe Ingredient must be a map.',
+      );
+    }
+
+    final Map<Object?, Object?> line = Map<Object?, Object?>.from(
+      rawLine,
+    );
+
+    final String lineId = _requiredString(
+      line['id'] ?? entry.key.toString(),
+      'ingredient.id',
+    );
+
+    if (!lineIds.add(lineId)) {
+      throw const FormatException(
+        'Duplicate Recipe Ingredient ID.',
+      );
+    }
+
+    result.add(
+      RecipeIngredient(
+        id: lineId,
+        recipeId: recipeId,
+        ingredientId: _requiredString(
+          line['ingredientId'],
+          'ingredient.ingredientId',
+        ),
+        ingredientSku: _requiredString(
+          line['ingredientSku'],
+          'ingredient.ingredientSku',
+        ).toUpperCase(),
+        ingredientName: _requiredString(
+          line['ingredientName'],
+          'ingredient.ingredientName',
+        ),
+        usageUnitCode: _requiredString(
+          line['usageUnitCode'],
+          'ingredient.usageUnitCode',
+        ).toUpperCase(),
+        quantityRequired: _positiveNumber(
+          line['quantityRequired'],
+          'ingredient.quantityRequired',
+        ),
+        costPerUsageUnit: _nonNegativeNumber(
+          line['costPerUsageUnit'],
+          'ingredient.costPerUsageUnit',
+        ),
+      ),
+    );
+  }
+
+  return List<RecipeIngredient>.unmodifiable(
+    result,
+  );
+}
+
+double _nonNegativeNumber(
+  Object? value,
+  String fieldName,
+) {
+  final double? number = value is num
+      ? value.toDouble()
+      : double.tryParse(
+          value?.toString() ?? '',
+        );
+
+  if (number == null || !number.isFinite || number < 0) {
+    throw FormatException(
+      '$fieldName must be zero or greater.',
+    );
+  }
+
+  return number;
+}
+
+bool _firebaseBool(
+  Object? value,
+  String fieldName,
+) {
+  if (value is bool) {
+    return value;
+  }
+
+  if (value == 1 || value?.toString().toLowerCase() == 'true') {
+    return true;
+  }
+
+  if (value == 0 || value?.toString().toLowerCase() == 'false') {
+    return false;
+  }
+
+  throw FormatException(
+    '$fieldName must be a Boolean.',
+  );
 }
 
 DateTime _epochUtc() {
