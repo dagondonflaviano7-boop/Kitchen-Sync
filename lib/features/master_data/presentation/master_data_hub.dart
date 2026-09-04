@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kitchen_sync/data/services/master_data_sync_service.dart';
 import 'package:kitchen_sync/features/master_data/ingredients/presentation/ingredient_screen.dart';
+import 'package:kitchen_sync/features/master_data/products/presentation/product_screen.dart';
 import 'package:kitchen_sync/features/master_data/recipes/presentation/recipe_screen.dart';
 import 'package:kitchen_sync/features/master_data/suppliers/presentation/supplier_screen.dart';
 import 'package:kitchen_sync/features/master_data/units/presentation/unit_of_measure_screen.dart';
@@ -245,6 +246,21 @@ class _MasterDataHubState extends State<MasterDataHub> {
                                   builder: (_) => RecipeScreen(
                                     currentUserId: widget.currentUserId,
                                   ),
+                                ),
+                              );
+                            },
+                          ),
+                          _MasterDataCard(
+                            title: 'Product Master',
+                            subtitle: 'Manage selling prices, inventory modes, '
+                                'costing methods, and Recipe links.',
+                            icon: Icons.inventory_2_outlined,
+                            color: const Color(0xFF2563EB),
+                            enabled: true,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const ProductScreen(),
                                 ),
                               );
                             },
