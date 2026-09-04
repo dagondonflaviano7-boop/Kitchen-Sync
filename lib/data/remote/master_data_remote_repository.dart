@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:kitchen_sync/domain/models/ingredient.dart';
+import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 
@@ -23,6 +24,7 @@ class MasterDataRemoteRepository {
   static const String unitsNode = 'unitsOfMeasure';
   static const String suppliersNode = 'suppliers';
   static const String ingredientsNode = 'ingredients';
+  static const String recipesNode = 'recipes';
 
   static const Duration requestTimeout = Duration(seconds: 15);
 
@@ -142,6 +144,44 @@ class MasterDataRemoteRepository {
     } on FirebaseException catch (error) {
       throw MasterDataRemoteException(
         'Firebase rejected the Ingredient update.',
+        cause: error,
+      );
+    }
+  }
+
+  Future<int> uploadRecipe(
+    Recipe recipe,
+  ) async {
+    recipe.validate();
+
+    final DatabaseReference reference = database.ref(
+      '$recipesNode/${recipe.id}',
+    );
+
+    final int nextVersion = await _nextServerVersion(
+      reference,
+      localVersion: recipe.serverVersion,
+    );
+
+    final Map<String, Object?> payload = Map<String, Object?>.from(
+      recipe.toFirebase(),
+    );
+
+    payload.remove('syncStatus');
+    payload['serverVersion'] = nextVersion;
+
+    try {
+      await reference.set(payload).timeout(requestTimeout);
+
+      return nextVersion;
+    } on TimeoutException catch (error) {
+      throw MasterDataRemoteException(
+        'Recipe synchronization timed out.',
+        cause: error,
+      );
+    } on FirebaseException catch (error) {
+      throw MasterDataRemoteException(
+        'Firebase rejected the Recipe update.',
         cause: error,
       );
     }
@@ -273,6 +313,50 @@ class MasterDataRemoteRepository {
       throw MasterDataRemoteException(
         'Unable to download Ingredients '
         'from Firebase.',
+        cause: error,
+      );
+    }
+  }
+
+  Future<List<Recipe>> downloadRecipes() async {
+    try {
+      final DataSnapshot snapshot =
+          await database.ref(recipesNode).get().timeout(requestTimeout);
+
+      if (!snapshot.exists || snapshot.value == null) {
+        return const <Recipe>[];
+      }
+
+      final Map<Object?, Object?> records = _requireMap(snapshot.value);
+
+      final List<Recipe> recipes = <Recipe>[];
+
+      for (final MapEntry<Object?, Object?> entry in records.entries) {
+        final Object? value = entry.value;
+
+        if (value is! Map) {
+          continue;
+        }
+
+        recipes.add(
+          Recipe.fromFirebase(
+            entry.key.toString(),
+            Map<Object?, Object?>.from(value),
+          ),
+        );
+      }
+
+      return List<Recipe>.unmodifiable(
+        recipes,
+      );
+    } on TimeoutException catch (error) {
+      throw MasterDataRemoteException(
+        'Downloading Recipes timed out.',
+        cause: error,
+      );
+    } on FirebaseException catch (error) {
+      throw MasterDataRemoteException(
+        'Unable to download Recipes from Firebase.',
         cause: error,
       );
     }
