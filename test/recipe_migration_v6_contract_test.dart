@@ -10,10 +10,10 @@ void main() {
   });
 
   group('Recipe Migration V6', () {
-    test('uses database version 6', () {
+    test('supports database version 6 or later', () {
       expect(
         AppConstants.databaseVersion,
-        6,
+        greaterThanOrEqualTo(6),
       );
     });
 
