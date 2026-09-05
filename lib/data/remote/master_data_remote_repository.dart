@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:kitchen_sync/domain/models/ingredient.dart';
+import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
@@ -25,6 +27,7 @@ class MasterDataRemoteRepository {
   static const String suppliersNode = 'suppliers';
   static const String ingredientsNode = 'ingredients';
   static const String recipesNode = 'recipes';
+  static const String productsNode = 'products';
 
   static const Duration requestTimeout = Duration(seconds: 15);
 
@@ -182,6 +185,44 @@ class MasterDataRemoteRepository {
     } on FirebaseException catch (error) {
       throw MasterDataRemoteException(
         'Firebase rejected the Recipe update.',
+        cause: error,
+      );
+    }
+  }
+
+  Future<int> uploadProduct(
+    Product product,
+  ) async {
+    product.validate();
+
+    final DatabaseReference reference = database.ref(
+      '$productsNode/${product.id}',
+    );
+
+    final int nextVersion = await _nextServerVersion(
+      reference,
+      localVersion: product.serverVersion,
+    );
+
+    final Map<String, Object?> payload = Map<String, Object?>.from(
+      product.toFirebase(),
+    );
+
+    payload.remove('syncStatus');
+    payload['serverVersion'] = nextVersion;
+
+    try {
+      await reference.set(payload).timeout(requestTimeout);
+
+      return nextVersion;
+    } on TimeoutException catch (error) {
+      throw MasterDataRemoteException(
+        'Product synchronization timed out.',
+        cause: error,
+      );
+    } on FirebaseException catch (error) {
+      throw MasterDataRemoteException(
+        'Firebase rejected the Product update.',
         cause: error,
       );
     }
@@ -357,6 +398,75 @@ class MasterDataRemoteRepository {
     } on FirebaseException catch (error) {
       throw MasterDataRemoteException(
         'Unable to download Recipes from Firebase.',
+        cause: error,
+      );
+    }
+  }
+
+  Future<List<Product>> downloadProducts() async {
+    try {
+      final DataSnapshot snapshot =
+          await database.ref(productsNode).get().timeout(requestTimeout);
+
+      if (!snapshot.exists || snapshot.value == null) {
+        return const <Product>[];
+      }
+
+      final Map<Object?, Object?> records = _requireMap(snapshot.value);
+
+      final List<Product> products = <Product>[];
+
+      for (final MapEntry<Object?, Object?> entry in records.entries) {
+        final Object? value = entry.value;
+
+        if (value is! Map) {
+          continue;
+        }
+
+        try {
+          products.add(
+            Product.fromFirebase(
+              entry.key.toString(),
+              Map<Object?, Object?>.from(value),
+            ),
+          );
+        } on FormatException catch (error) {
+          debugPrint(
+            'Skipping malformed Firebase Product '
+            '${entry.key}: $error',
+          );
+        }
+      }
+
+      products.sort(
+        (
+          Product first,
+          Product second,
+        ) {
+          final int nameComparison = first.productName.toLowerCase().compareTo(
+                second.productName.toLowerCase(),
+              );
+
+          if (nameComparison != 0) {
+            return nameComparison;
+          }
+
+          return first.sku.compareTo(second.sku);
+        },
+      );
+
+      return List<Product>.unmodifiable(
+        products,
+      );
+    } on TimeoutException catch (error) {
+      throw MasterDataRemoteException(
+        'Downloading Products timed out.',
+        cause: error,
+      );
+    } on FirebaseException catch (error) {
+      throw MasterDataRemoteException(
+        'Unable to download Products '
+        'from Firebase.',
         cause: error,
       );
     }
