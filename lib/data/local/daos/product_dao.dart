@@ -1,4 +1,5 @@
 import 'package:kitchen_sync/domain/models/product.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:sqflite/sqflite.dart';
 
 class ProductDao {
@@ -390,5 +391,181 @@ class ProductDao {
     );
 
     return rows.map(Product.fromSqlite).toList(growable: false);
+  }
+
+  Future<List<Product>> findPending(
+    DatabaseExecutor database, {
+    int limit = 100,
+  }) async {
+    if (limit < 1) {
+      throw const FormatException(
+        'Pending synchronization limit '
+        'must be greater than zero.',
+      );
+    }
+
+    final List<Map<String, Object?>> rows = await database.query(
+      'products',
+      where: 'sync_status IN (?, ?)',
+      whereArgs: const <Object?>[
+        'PENDING',
+        'ERROR',
+      ],
+      orderBy: 'updated_at, id',
+      limit: limit,
+    );
+
+    return rows.map(Product.fromSqlite).toList(growable: false);
+  }
+
+  Future<void> markSyncing(
+    DatabaseExecutor database,
+    String productId,
+  ) async {
+    await _updateSyncStatus(
+      database,
+      productId,
+      MasterSyncStatus.syncing,
+    );
+  }
+
+  Future<void> markSynced(
+    DatabaseExecutor database,
+    String productId, {
+    required int serverVersion,
+  }) async {
+    final String normalizedId = productId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Product ID is required.',
+      );
+    }
+
+    if (serverVersion < 0) {
+      throw const FormatException(
+        'Server version must be zero or greater.',
+      );
+    }
+
+    final int updated = await database.update(
+      'products',
+      <String, Object?>{
+        'sync_status': 'SYNCED',
+        'server_version': serverVersion,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Product record was not found.',
+      );
+    }
+  }
+
+  Future<void> markSyncError(
+    DatabaseExecutor database,
+    String productId,
+  ) async {
+    await _updateSyncStatus(
+      database,
+      productId,
+      MasterSyncStatus.error,
+    );
+  }
+
+  Future<void> _updateSyncStatus(
+    DatabaseExecutor database,
+    String productId,
+    MasterSyncStatus status,
+  ) async {
+    final String normalizedId = productId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Product ID is required.',
+      );
+    }
+
+    final int updated = await database.update(
+      'products',
+      <String, Object?>{
+        'sync_status': masterSyncStatusToStorage(status),
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Product record was not found.',
+      );
+    }
+  }
+
+  Future<void> softDelete(
+    DatabaseExecutor database,
+    String productId, {
+    DateTime? deletedAt,
+  }) async {
+    final String normalizedId = productId.trim();
+
+    if (normalizedId.isEmpty) {
+      throw const FormatException(
+        'Product ID is required.',
+      );
+    }
+
+    final String timestamp =
+        (deletedAt ?? DateTime.now()).toUtc().toIso8601String();
+
+    final int updated = await database.update(
+      'products',
+      <String, Object?>{
+        'active': 0,
+        'updated_at': timestamp,
+        'sync_status': 'PENDING',
+        'deleted_at': timestamp,
+      },
+      where: '''
+        id = ?
+        AND deleted_at IS NULL
+      ''',
+      whereArgs: <Object?>[
+        normalizedId,
+      ],
+    );
+
+    if (updated == 0) {
+      throw StateError(
+        'The Product record was not found '
+        'or was already deleted.',
+      );
+    }
+  }
+
+  Future<void> upsertRemote(
+    DatabaseExecutor database,
+    Product product,
+  ) async {
+    product.validate();
+
+    final Product synchronized = product.copyWith(
+      syncStatus: MasterSyncStatus.synced,
+    );
+
+    synchronized.validate();
+
+    await database.insert(
+      'products',
+      synchronized.toSqlite(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }
