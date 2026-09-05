@@ -1,3 +1,5 @@
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
+
 enum ProductInventoryMode {
   direct,
   recipe,
@@ -104,6 +106,10 @@ class Product {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  final MasterSyncStatus syncStatus;
+  final int serverVersion;
+  final DateTime? deletedAt;
+
   const Product({
     required this.id,
     required this.sku,
@@ -131,6 +137,9 @@ class Product {
     this.imagePublicId,
     required this.createdAt,
     required this.updatedAt,
+    this.syncStatus = MasterSyncStatus.pending,
+    this.serverVersion = 0,
+    this.deletedAt,
   });
 
   bool get usesDirectInventory {
@@ -152,6 +161,10 @@ class Product {
 
   bool get hasRecipe {
     return _optionalString(recipeId) != null;
+  }
+
+  bool get isDeleted {
+    return deletedAt != null;
   }
 
   double get priceIncludingVat {
@@ -204,6 +217,18 @@ class Product {
     if (createdAt.isAfter(updatedAt)) {
       throw const FormatException(
         'Created At cannot be after Updated At.',
+      );
+    }
+
+    if (serverVersion < 0) {
+      throw const FormatException(
+        'Server Version must be zero or greater.',
+      );
+    }
+
+    if (deletedAt != null && active) {
+      throw const FormatException(
+        'A deleted Product cannot remain active.',
       );
     }
 
@@ -284,6 +309,11 @@ class Product {
       'image_public_id': _optionalString(imagePublicId),
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
+      'sync_status': masterSyncStatusToStorage(
+        syncStatus,
+      ),
+      'server_version': serverVersion,
+      'deleted_at': deletedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -378,6 +408,16 @@ class Product {
         map['updated_at'],
         'Updated At',
       ),
+      syncStatus: masterSyncStatusFromStorage(
+        map['sync_status']?.toString() ?? 'PENDING',
+      ),
+      serverVersion: _nonNegativeInteger(
+        map['server_version'] ?? 0,
+        'Server Version',
+      ),
+      deletedAt: _optionalDateTime(
+        map['deleted_at'],
+      ),
     );
 
     product.validate();
@@ -418,6 +458,11 @@ class Product {
       'imagePublicId': _optionalString(imagePublicId),
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
+      'syncStatus': masterSyncStatusToStorage(
+        syncStatus,
+      ),
+      'serverVersion': serverVersion,
+      'deletedAt': deletedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -518,6 +563,16 @@ class Product {
         map['updatedAt'],
         'Updated At',
       ),
+      syncStatus: masterSyncStatusFromStorage(
+        map['syncStatus']?.toString() ?? 'SYNCED',
+      ),
+      serverVersion: _nonNegativeInteger(
+        map['serverVersion'] ?? 0,
+        'Server Version',
+      ),
+      deletedAt: _optionalDateTime(
+        map['deletedAt'],
+      ),
     );
 
     product.validate();
@@ -551,6 +606,10 @@ class Product {
     Object? imagePublicId = _notProvided,
     DateTime? createdAt,
     DateTime? updatedAt,
+    MasterSyncStatus? syncStatus,
+    int? serverVersion,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) {
     return Product(
       id: id ?? this.id,
@@ -654,6 +713,9 @@ class Product {
           : imagePublicId as String?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      serverVersion: serverVersion ?? this.serverVersion,
+      deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
     );
   }
 }
@@ -706,6 +768,45 @@ double _nonNegativeNumber(
   }
 
   return number;
+}
+
+int _nonNegativeInteger(
+  Object? value,
+  String fieldName,
+) {
+  final int? number = value is int
+      ? value
+      : int.tryParse(
+          value?.toString() ?? '',
+        );
+
+  if (number == null || number < 0) {
+    throw FormatException(
+      '$fieldName must be zero or greater.',
+    );
+  }
+
+  return number;
+}
+
+DateTime? _optionalDateTime(
+  Object? value,
+) {
+  final String normalized = value?.toString().trim() ?? '';
+
+  if (normalized.isEmpty) {
+    return null;
+  }
+
+  final DateTime? dateTime = DateTime.tryParse(normalized);
+
+  if (dateTime == null) {
+    throw const FormatException(
+      'Optional date must be valid.',
+    );
+  }
+
+  return dateTime.toUtc();
 }
 
 bool _sqliteBool(

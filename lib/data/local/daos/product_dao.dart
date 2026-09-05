@@ -338,6 +338,7 @@ class ProductDao {
       <String, Object?>{
         'active': active ? 1 : 0,
         'updated_at': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
+        'sync_status': 'PENDING',
       },
       where: 'id = ?',
       whereArgs: <Object?>[

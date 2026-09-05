@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_sync/domain/models/product.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 
 void main() {
   Product createProduct({
@@ -249,6 +250,147 @@ void main() {
       expect(product.grossProfit, 50);
       expect(product.grossMargin, 50);
       expect(product.priceIncludingVat, 112);
+    });
+  });
+  productSyncMetadataTests();
+}
+
+void productSyncMetadataTests() {
+  Product buildSyncProduct({
+    bool active = true,
+    MasterSyncStatus syncStatus = MasterSyncStatus.pending,
+    int serverVersion = 0,
+    DateTime? deletedAt,
+  }) {
+    return Product(
+      id: 'sync-product-001',
+      sku: 'SYNC-SKU-001',
+      productName: 'Sync Product',
+      cost: 10,
+      retailPrice: 20,
+      vat: 0,
+      active: active,
+      inventoryMode: ProductInventoryMode.direct,
+      costingMethod: ProductCostingMethod.manual,
+      createdAt: DateTime.utc(
+        2026,
+        9,
+        4,
+      ),
+      updatedAt: DateTime.utc(
+        2026,
+        9,
+        5,
+      ),
+      syncStatus: syncStatus,
+      serverVersion: serverVersion,
+      deletedAt: deletedAt,
+    );
+  }
+
+  group('Product sync metadata', () {
+    test('defaults to Pending version zero', () {
+      final Product product = buildSyncProduct();
+
+      expect(
+        product.syncStatus,
+        MasterSyncStatus.pending,
+      );
+
+      expect(product.serverVersion, 0);
+      expect(product.deletedAt, isNull);
+      expect(product.isDeleted, isFalse);
+    });
+
+    test('round-trips SQLite sync metadata', () {
+      final Product original = buildSyncProduct(
+        active: false,
+        syncStatus: MasterSyncStatus.error,
+        serverVersion: 6,
+        deletedAt: DateTime.utc(
+          2026,
+          9,
+          6,
+        ),
+      );
+
+      final Product restored = Product.fromSqlite(
+        original.toSqlite(),
+      );
+
+      expect(
+        restored.syncStatus,
+        MasterSyncStatus.error,
+      );
+
+      expect(restored.serverVersion, 6);
+      expect(restored.isDeleted, isTrue);
+      expect(restored.active, isFalse);
+    });
+
+    test('round-trips Firebase sync metadata', () {
+      final Product original = buildSyncProduct(
+        syncStatus: MasterSyncStatus.synced,
+        serverVersion: 8,
+      );
+
+      final Product restored = Product.fromFirebase(
+        original.id,
+        Map<Object?, Object?>.from(
+          original.toFirebase(),
+        ),
+      );
+
+      expect(
+        restored.syncStatus,
+        MasterSyncStatus.synced,
+      );
+
+      expect(restored.serverVersion, 8);
+    });
+
+    test('rejects negative server version', () {
+      expect(
+        () => buildSyncProduct(
+          serverVersion: -1,
+        ).validate(),
+        throwsFormatException,
+      );
+    });
+
+    test('rejects active tombstone', () {
+      expect(
+        () => buildSyncProduct(
+          active: true,
+          deletedAt: DateTime.utc(
+            2026,
+            9,
+            6,
+          ),
+        ).validate(),
+        throwsFormatException,
+      );
+    });
+
+    test('copyWith clears tombstone', () {
+      final Product deleted = buildSyncProduct(
+        active: false,
+        deletedAt: DateTime.utc(
+          2026,
+          9,
+          6,
+        ),
+      );
+
+      final Product restored = deleted.copyWith(
+        active: true,
+        clearDeletedAt: true,
+        syncStatus: MasterSyncStatus.pending,
+      );
+
+      expect(restored.deletedAt, isNull);
+      expect(restored.isDeleted, isFalse);
+      expect(restored.active, isTrue);
     });
   });
 }

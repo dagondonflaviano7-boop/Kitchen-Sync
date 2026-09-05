@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_sync/data/local/daos/product_dao.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v1.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v7.dart';
+import 'package:kitchen_sync/data/local/migrations/migration_v8.dart';
 import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -33,6 +34,10 @@ void main() {
           );
 
           for (final String statement in migrationV7) {
+            await db.execute(statement);
+          }
+
+          for (final String statement in migrationV8) {
             await db.execute(statement);
           }
         },

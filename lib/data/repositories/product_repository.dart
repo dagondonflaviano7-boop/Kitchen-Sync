@@ -2,6 +2,7 @@ import 'package:kitchen_sync/data/local/daos/product_dao.dart';
 import 'package:kitchen_sync/data/local/daos/recipe_dao.dart';
 import 'package:kitchen_sync/data/local/database.dart';
 import 'package:kitchen_sync/domain/models/product.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -102,6 +103,12 @@ class ProductRepository {
           product.id,
         );
 
+        if (existing?.isDeleted ?? false) {
+          throw StateError(
+            'A deleted Product cannot be edited.',
+          );
+        }
+
         final bool duplicateSku = await productDao.skuExists(
           transaction,
           product.sku,
@@ -153,6 +160,9 @@ class ProductRepository {
           recipeId: normalizedRecipeId,
           createdAt: existing?.createdAt ?? product.createdAt,
           updatedAt: now,
+          syncStatus: MasterSyncStatus.pending,
+          serverVersion: existing?.serverVersion ?? product.serverVersion,
+          clearDeletedAt: true,
         );
 
         normalized.validate();
