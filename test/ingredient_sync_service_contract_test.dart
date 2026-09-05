@@ -282,7 +282,7 @@ void main() {
       expect(
         hubSource,
         contains(
-          "'Suppliers, Ingredients, and Recipes '",
+          "'Suppliers, Ingredients, Recipes, '",
         ),
       );
     });

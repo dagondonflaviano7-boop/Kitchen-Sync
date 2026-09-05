@@ -1,11 +1,13 @@
 import 'package:kitchen_sync/core/connectivity/connectivity_service.dart';
 import 'package:kitchen_sync/data/local/daos/ingredient_dao.dart';
+import 'package:kitchen_sync/data/local/daos/product_dao.dart';
 import 'package:kitchen_sync/data/local/daos/recipe_dao.dart';
 import 'package:kitchen_sync/data/local/daos/supplier_dao.dart';
 import 'package:kitchen_sync/data/local/daos/unit_of_measure_dao.dart';
 import 'package:kitchen_sync/data/local/database.dart';
 import 'package:kitchen_sync/data/remote/master_data_remote_repository.dart';
 import 'package:kitchen_sync/domain/models/ingredient.dart';
+import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/domain/models/supplier.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
@@ -16,10 +18,12 @@ class MasterDataSyncResult {
   final int uploadedSuppliers;
   final int uploadedIngredients;
   final int uploadedRecipes;
+  final int uploadedProducts;
   final int downloadedUnits;
   final int downloadedSuppliers;
   final int downloadedIngredients;
   final int downloadedRecipes;
+  final int downloadedProducts;
   final int preservedLocalChanges;
   final int errors;
   final bool offline;
@@ -29,10 +33,12 @@ class MasterDataSyncResult {
     required this.uploadedSuppliers,
     required this.uploadedIngredients,
     this.uploadedRecipes = 0,
+    this.uploadedProducts = 0,
     required this.downloadedUnits,
     required this.downloadedSuppliers,
     required this.downloadedIngredients,
     this.downloadedRecipes = 0,
+    this.downloadedProducts = 0,
     required this.preservedLocalChanges,
     required this.errors,
     this.offline = false,
@@ -43,10 +49,12 @@ class MasterDataSyncResult {
         uploadedSuppliers = 0,
         uploadedIngredients = 0,
         uploadedRecipes = 0,
+        uploadedProducts = 0,
         downloadedUnits = 0,
         downloadedSuppliers = 0,
         downloadedIngredients = 0,
         downloadedRecipes = 0,
+        downloadedProducts = 0,
         preservedLocalChanges = 0,
         errors = 0,
         offline = true;
@@ -62,6 +70,7 @@ class MasterDataSyncService {
   final SupplierDao supplierDao;
   final IngredientDao ingredientDao;
   final RecipeDao recipeDao;
+  final ProductDao productDao;
   final ConnectivityService connectivityService;
 
   bool _running = false;
@@ -72,6 +81,7 @@ class MasterDataSyncService {
     this.supplierDao = const SupplierDao(),
     this.ingredientDao = const IngredientDao(),
     this.recipeDao = const RecipeDao(),
+    this.productDao = const ProductDao(),
     ConnectivityService? connectivityService,
   })  : remoteRepository = remoteRepository ?? MasterDataRemoteRepository(),
         connectivityService = connectivityService ?? ConnectivityService();
@@ -100,10 +110,12 @@ class MasterDataSyncService {
       int uploadedSuppliers = 0;
       int uploadedIngredients = 0;
       int uploadedRecipes = 0;
+      int uploadedProducts = 0;
       int downloadedUnits = 0;
       int downloadedSuppliers = 0;
       int downloadedIngredients = 0;
       int downloadedRecipes = 0;
+      int downloadedProducts = 0;
       int preservedLocalChanges = 0;
       int errors = 0;
 
@@ -230,6 +242,37 @@ class MasterDataSyncService {
         }
       }
 
+      final List<Product> pendingProducts =
+          await productDao.findPending(database);
+
+      for (final Product product in pendingProducts) {
+        try {
+          await productDao.markSyncing(
+            database,
+            product.id,
+          );
+
+          final int serverVersion = await remoteRepository.uploadProduct(
+            product,
+          );
+
+          await productDao.markSynced(
+            database,
+            product.id,
+            serverVersion: serverVersion,
+          );
+
+          uploadedProducts += 1;
+        } catch (_) {
+          errors += 1;
+
+          await productDao.markSyncError(
+            database,
+            product.id,
+          );
+        }
+      }
+
       final List<UnitOfMeasure> remoteUnits =
           await remoteRepository.downloadUnits();
 
@@ -346,15 +389,47 @@ class MasterDataSyncService {
         }
       }
 
+      final List<Product> remoteProducts =
+          await remoteRepository.downloadProducts();
+
+      for (final Product remoteProduct in remoteProducts) {
+        final Product? localProduct =
+            await productDao.findByIdIncludingInactive(
+          database,
+          remoteProduct.id,
+        );
+
+        if (_hasUnresolvedLocalProduct(
+          localProduct,
+        )) {
+          preservedLocalChanges += 1;
+          continue;
+        }
+
+        if (_shouldApplyRemoteProduct(
+          localProduct,
+          remoteProduct,
+        )) {
+          await productDao.upsertRemote(
+            database,
+            remoteProduct,
+          );
+
+          downloadedProducts += 1;
+        }
+      }
+
       return MasterDataSyncResult(
         uploadedUnits: uploadedUnits,
         uploadedSuppliers: uploadedSuppliers,
         uploadedIngredients: uploadedIngredients,
         uploadedRecipes: uploadedRecipes,
+        uploadedProducts: uploadedProducts,
         downloadedUnits: downloadedUnits,
         downloadedSuppliers: downloadedSuppliers,
         downloadedIngredients: downloadedIngredients,
         downloadedRecipes: downloadedRecipes,
+        downloadedProducts: downloadedProducts,
         preservedLocalChanges: preservedLocalChanges,
         errors: errors,
       );
@@ -477,6 +552,39 @@ class MasterDataSyncService {
   bool _shouldApplyRemoteRecipe(
     Recipe? local,
     Recipe remote,
+  ) {
+    if (local == null) {
+      return true;
+    }
+
+    if (remote.serverVersion > local.serverVersion) {
+      return true;
+    }
+
+    if (remote.serverVersion < local.serverVersion) {
+      return false;
+    }
+
+    return remote.updatedAt.isAfter(
+      local.updatedAt,
+    );
+  }
+
+  bool _hasUnresolvedLocalProduct(
+    Product? local,
+  ) {
+    if (local == null) {
+      return false;
+    }
+
+    return local.syncStatus == MasterSyncStatus.pending ||
+        local.syncStatus == MasterSyncStatus.syncing ||
+        local.syncStatus == MasterSyncStatus.error;
+  }
+
+  bool _shouldApplyRemoteProduct(
+    Product? local,
+    Product remote,
   ) {
     if (local == null) {
       return true;

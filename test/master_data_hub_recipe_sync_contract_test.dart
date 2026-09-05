@@ -35,14 +35,14 @@ void main() {
       expect(
         source,
         contains(
-          'Ingredients, and Recipes ',
+          'Ingredients, Recipes, ',
         ),
       );
 
       expect(
         source,
         contains(
-          "'with Firebase.'",
+          "'and Products with Firebase.'",
         ),
       );
     });
