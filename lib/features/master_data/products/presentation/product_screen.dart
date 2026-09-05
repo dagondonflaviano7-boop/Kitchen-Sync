@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kitchen_sync/data/repositories/product_repository.dart';
 import 'package:kitchen_sync/data/repositories/recipe_repository.dart';
 import 'package:kitchen_sync/domain/models/product.dart';
+import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/features/master_data/products/presentation/product_form_screen.dart';
 
@@ -445,6 +446,79 @@ class _ProductScreenState extends State<ProductScreen> {
     );
   }
 
+  Widget _buildSyncBadge(
+    Product product,
+  ) {
+    final String label;
+    final Color background;
+    final Color border;
+    final Color foreground;
+    final IconData icon;
+
+    switch (product.syncStatus) {
+      case MasterSyncStatus.pending:
+        label = 'Pending';
+        background = const Color(0xFFFFFAEB);
+        border = const Color(0xFFFED671);
+        foreground = const Color(0xFFB54708);
+        icon = Icons.schedule_outlined;
+
+      case MasterSyncStatus.syncing:
+        label = 'Syncing';
+        background = const Color(0xFFEFF8FF);
+        border = const Color(0xFFB2DDFF);
+        foreground = const Color(0xFF175CD3);
+        icon = Icons.sync;
+
+      case MasterSyncStatus.synced:
+        label = 'Synced';
+        background = const Color(0xFFECFDF3);
+        border = const Color(0xFFABEFC6);
+        foreground = const Color(0xFF067647);
+        icon = Icons.cloud_done_outlined;
+
+      case MasterSyncStatus.error:
+        label = 'Error';
+        background = const Color(0xFFFEF3F2);
+        border = const Color(0xFFFECDCA);
+        foreground = const Color(0xFFB42318);
+        icon = Icons.cloud_off_outlined;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: border,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: foreground,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   PopupMenuButton<String> _buildActionsMenu(
     Product product,
   ) {
@@ -704,6 +778,7 @@ class _ProductScreenState extends State<ProductScreen> {
                     runSpacing: 8,
                     children: [
                       _buildStatusBadge(product),
+                      _buildSyncBadge(product),
                       _buildInventoryBadge(product),
                       Chip(
                         visualDensity: VisualDensity.compact,
