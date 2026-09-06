@@ -302,6 +302,14 @@ void main() {
           movements[0]['unit_cost_snapshot'],
           20,
         );
+        expect(
+          movements[0]['recipe_id'],
+          'recipe-001',
+        );
+        expect(
+          movements[0]['recipe_ingredient_id'],
+          'recipe-line-001',
+        );
 
         expect(
           movements[1]['item_id'],
@@ -322,6 +330,14 @@ void main() {
         expect(
           movements[1]['unit_cost_snapshot'],
           5,
+        );
+        expect(
+          movements[1]['recipe_id'],
+          'recipe-001',
+        );
+        expect(
+          movements[1]['recipe_ingredient_id'],
+          'recipe-line-002',
         );
       },
     );
