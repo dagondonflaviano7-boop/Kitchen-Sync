@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_sync/data/local/daos/sale_consumption_dao.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v9.dart';
+import 'package:kitchen_sync/data/local/migrations/migration_v10.dart';
 import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:kitchen_sync/domain/models/sale_consumption.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -27,6 +28,10 @@ void main() {
         );
 
         for (final String statement in migrationV9) {
+          await db.execute(statement);
+        }
+
+        for (final String statement in migrationV10) {
           await db.execute(statement);
         }
       },
@@ -297,6 +302,14 @@ void main() {
           movements[0]['unit_cost_snapshot'],
           20,
         );
+        expect(
+          movements[0]['recipe_id'],
+          'recipe-001',
+        );
+        expect(
+          movements[0]['recipe_ingredient_id'],
+          'recipe-line-001',
+        );
 
         expect(
           movements[1]['item_id'],
@@ -317,6 +330,14 @@ void main() {
         expect(
           movements[1]['unit_cost_snapshot'],
           5,
+        );
+        expect(
+          movements[1]['recipe_id'],
+          'recipe-001',
+        );
+        expect(
+          movements[1]['recipe_ingredient_id'],
+          'recipe-line-002',
         );
       },
     );

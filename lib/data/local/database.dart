@@ -9,6 +9,7 @@ import 'package:kitchen_sync/data/local/migrations/migration_v6.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v7.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v8.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v9.dart';
+import 'package:kitchen_sync/data/local/migrations/migration_v10.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -100,6 +101,13 @@ class AppDatabase {
               migrationV9,
             );
           }
+
+          if (version >= 10) {
+            await _runStatements(
+              transaction,
+              migrationV10,
+            );
+          }
         });
       },
       onUpgrade: (
@@ -161,6 +169,13 @@ class AppDatabase {
             await _runStatements(
               transaction,
               migrationV9,
+            );
+          }
+
+          if (oldVersion < 10 && newVersion >= 10) {
+            await _runStatements(
+              transaction,
+              migrationV10,
             );
           }
         });

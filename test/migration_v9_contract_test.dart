@@ -23,12 +23,23 @@ void main() {
   });
 
   group('Movement Audit Migration V9', () {
-    test('increases database version to 9', () {
+    test('keeps database version at 9 or higher', () {
+      final RegExpMatch? versionMatch = RegExp(
+        r'databaseVersion\s*=\s*(\d+)',
+      ).firstMatch(constants);
+
       expect(
-        constants,
-        contains(
-          'databaseVersion = 9',
-        ),
+        versionMatch,
+        isNotNull,
+      );
+
+      final int databaseVersion = int.parse(
+        versionMatch!.group(1)!,
+      );
+
+      expect(
+        databaseVersion,
+        greaterThanOrEqualTo(9),
       );
     });
 
