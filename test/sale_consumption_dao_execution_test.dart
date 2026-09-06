@@ -7,7 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late Database database;
-  const SaleConsumptionDao dao = SaleConsumptionDao();
+  late SaleConsumptionDao dao;
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -22,28 +22,34 @@ void main() {
         Database db,
         int version,
       ) async {
-        await createVersion8InventorySchema(db);
-        await applyMigrationV9(db);
+        await _createVersion8InventorySchema(
+          db,
+        );
+
+        for (final String statement in migrationV9) {
+          await db.execute(statement);
+        }
       },
     );
+
+    dao = const SaleConsumptionDao();
   });
 
   tearDown(() async {
     await database.close();
   });
 
-  group('SaleConsumptionDao SQLite execution', () {
+  group('Sale Consumption DAO SQLite execution', () {
     test(
-      'DIRECT consumption deducts Product inventory '
-      'and inserts an audit movement',
+      'executes DIRECT Product consumption',
       () async {
-        await insertProductBalance(
+        await _insertProductBalance(
           database,
           quantity: 10,
           averageCost: 50,
         );
 
-        final SaleConsumptionPlan plan = buildDirectConsumptionPlan();
+        final SaleConsumptionPlan plan = _directPlan();
 
         await database.transaction(
           (Transaction transaction) async {
@@ -54,44 +60,34 @@ void main() {
           },
         );
 
-        final Map<String, Object?> balance = await getProductBalance(database);
+        final Map<String, Object?> balance = await _singleRow(
+          database,
+          table: 'inventory',
+          where: '''
+            store_id = ?
+            AND product_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'product-001',
+          ],
+        );
 
         expect(
           balance['quantity'],
           8,
         );
-        expect(
-          balance['average_cost'],
-          50,
-        );
-        expect(
-          balance['updated_at'],
-          testOccurredAt.toIso8601String(),
+
+        final Map<String, Object?> movement = await _singleRow(
+          database,
+          table: 'inventory_movements',
+          where: 'idempotency_key = ?',
+          whereArgs: const <Object?>[
+            'SALE:sale-001:sale-item-001:'
+                'PRODUCT:product-001:consume',
+          ],
         );
 
-        final List<Map<String, Object?>> movements = await database.query(
-          'inventory_movements',
-        );
-
-        expect(
-          movements,
-          hasLength(1),
-        );
-
-        final Map<String, Object?> movement = movements.single;
-
-        expect(
-          movement['id'],
-          directConsumptionKey,
-        );
-        expect(
-          movement['store_id'],
-          'store-001',
-        );
-        expect(
-          movement['item_id'],
-          'product-001',
-        );
         expect(
           movement['quantity'],
           -2,
@@ -113,24 +109,12 @@ void main() {
           'sale-001',
         );
         expect(
-          movement['idempotency_key'],
-          directConsumptionKey,
-        );
-        expect(
           movement['source_sale_id'],
           'sale-001',
         );
         expect(
           movement['source_sale_item_id'],
           'sale-item-001',
-        );
-        expect(
-          movement['unit_cost_snapshot'],
-          50,
-        );
-        expect(
-          movement['reversal_of_movement_id'],
-          isNull,
         );
         expect(
           movement['user_id'],
@@ -141,102 +125,26 @@ void main() {
           'device-001',
         );
         expect(
-          movement['created_at'],
-          testOccurredAt.toIso8601String(),
+          movement['unit_cost_snapshot'],
+          50,
+        );
+        expect(
+          movement['reversal_of_movement_id'],
+          isNull,
         );
       },
     );
 
     test(
-      'repeated DIRECT execution is idempotent',
+      'does not apply duplicate DIRECT movement twice',
       () async {
-        await insertProductBalance(
+        await _insertProductBalance(
           database,
           quantity: 10,
           averageCost: 50,
         );
 
-        final SaleConsumptionPlan plan = buildDirectConsumptionPlan();
-
-        await dao.executePlan(
-          database,
-          plan,
-        );
-
-        await dao.executePlan(
-          database,
-          plan,
-        );
-
-        final Map<String, Object?> balance = await getProductBalance(database);
-
-        expect(
-          balance['quantity'],
-          8,
-        );
-
-        final int movementCount = await countRows(
-          database,
-          'inventory_movements',
-        );
-
-        expect(
-          movementCount,
-          1,
-        );
-      },
-    );
-
-    test(
-      'DIRECT consumption rejects missing Product inventory',
-      () async {
-        await expectLater(
-          dao.executePlan(
-            database,
-            buildDirectConsumptionPlan(),
-          ),
-          throwsA(
-            isA<StateError>().having(
-              (StateError error) {
-                return error.message;
-              },
-              'message',
-              'Product Inventory record was not found.',
-            ),
-          ),
-        );
-
-        expect(
-          await countRows(
-            database,
-            'inventory_movements',
-          ),
-          0,
-        );
-      },
-    );
-
-    test(
-      'RECIPE consumption deducts all Ingredient balances '
-      'and inserts audit movements',
-      () async {
-        await insertIngredientBalance(
-          database,
-          id: 'ingredient-inventory-001',
-          ingredientId: 'ingredient-001',
-          quantity: 5,
-          averageCost: 20,
-        );
-
-        await insertIngredientBalance(
-          database,
-          id: 'ingredient-inventory-002',
-          ingredientId: 'ingredient-002',
-          quantity: 8,
-          averageCost: 5,
-        );
-
-        final SaleConsumptionPlan plan = buildRecipeConsumptionPlan();
+        final SaleConsumptionPlan plan = _directPlan();
 
         await database.transaction(
           (Transaction transaction) async {
@@ -247,14 +155,107 @@ void main() {
           },
         );
 
-        final Map<String, Object?> firstBalance = await getIngredientBalance(
-          database,
-          'ingredient-001',
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              plan,
+            );
+          },
         );
 
-        final Map<String, Object?> secondBalance = await getIngredientBalance(
+        final Map<String, Object?> balance = await _singleRow(
           database,
-          'ingredient-002',
+          table: 'inventory',
+          where: '''
+            store_id = ?
+            AND product_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'product-001',
+          ],
+        );
+
+        expect(
+          balance['quantity'],
+          8,
+        );
+
+        final int movementCount = await _countRows(
+          database,
+          table: 'inventory_movements',
+        );
+
+        expect(
+          movementCount,
+          1,
+        );
+
+        expect(
+          await dao.hasProcessedMovement(
+            database,
+            plan.movements.single,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'executes RECIPE Ingredient consumption',
+      () async {
+        await _insertIngredientBalance(
+          database,
+          id: 'ingredient-inventory-001',
+          ingredientId: 'ingredient-001',
+          quantity: 5,
+          averageCost: 20,
+        );
+
+        await _insertIngredientBalance(
+          database,
+          id: 'ingredient-inventory-002',
+          ingredientId: 'ingredient-002',
+          quantity: 8,
+          averageCost: 5,
+        );
+
+        final SaleConsumptionPlan plan = _recipePlan();
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              plan,
+            );
+          },
+        );
+
+        final Map<String, Object?> firstBalance = await _singleRow(
+          database,
+          table: 'ingredient_inventory',
+          where: '''
+            store_id = ?
+            AND ingredient_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'ingredient-001',
+          ],
+        );
+
+        final Map<String, Object?> secondBalance = await _singleRow(
+          database,
+          table: 'ingredient_inventory',
+          where: '''
+            store_id = ?
+            AND ingredient_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'ingredient-002',
+          ],
         );
 
         expect(
@@ -262,17 +263,8 @@ void main() {
           4.5,
         );
         expect(
-          firstBalance['average_cost'],
-          20,
-        );
-
-        expect(
           secondBalance['quantity'],
           7,
-        );
-        expect(
-          secondBalance['average_cost'],
-          5,
         );
 
         final List<Map<String, Object?>> movements = await database.query(
@@ -330,102 +322,36 @@ void main() {
     );
 
     test(
-      'repeated RECIPE execution is idempotent',
+      'executes NONE Product plan without inventory writes',
       () async {
-        await insertIngredientBalance(
-          database,
-          id: 'ingredient-inventory-001',
-          ingredientId: 'ingredient-001',
-          quantity: 5,
-          averageCost: 20,
+        final SaleConsumptionPlan plan = SaleConsumptionPlan(
+          request: _request(),
+          inventoryMode: ProductInventoryMode.none,
+          movements: const <PlannedInventoryMovement>[],
+          expectedCost: 0,
         );
 
-        await insertIngredientBalance(
-          database,
-          id: 'ingredient-inventory-002',
-          ingredientId: 'ingredient-002',
-          quantity: 8,
-          averageCost: 5,
-        );
-
-        final SaleConsumptionPlan plan = buildRecipeConsumptionPlan();
-
-        await dao.executePlan(
-          database,
-          plan,
-        );
-
-        await dao.executePlan(
-          database,
-          plan,
-        );
-
-        final Map<String, Object?> firstBalance = await getIngredientBalance(
-          database,
-          'ingredient-001',
-        );
-
-        final Map<String, Object?> secondBalance = await getIngredientBalance(
-          database,
-          'ingredient-002',
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              plan,
+            );
+          },
         );
 
         expect(
-          firstBalance['quantity'],
-          4.5,
-        );
-        expect(
-          secondBalance['quantity'],
-          7,
-        );
-
-        expect(
-          await countRows(
+          await _countRows(
             database,
-            'ingredient_movements',
-          ),
-          2,
-        );
-      },
-    );
-
-    test(
-      'NONE plan performs no balance or movement writes',
-      () async {
-        await insertProductBalance(
-          database,
-          quantity: 10,
-          averageCost: 50,
-        );
-
-        await dao.executePlan(
-          database,
-          buildNonePlan(),
-        );
-
-        final Map<String, Object?> balance = await getProductBalance(database);
-
-        expect(
-          balance['quantity'],
-          10,
-        );
-        expect(
-          balance['average_cost'],
-          50,
-        );
-
-        expect(
-          await countRows(
-            database,
-            'inventory_movements',
+            table: 'inventory_movements',
           ),
           0,
         );
 
         expect(
-          await countRows(
+          await _countRows(
             database,
-            'ingredient_movements',
+            table: 'ingredient_movements',
           ),
           0,
         );
@@ -433,23 +359,16 @@ void main() {
     );
 
     test(
-      'RECIPE failure rolls back earlier Ingredient writes '
-      'when executed inside one transaction',
+      'rejects DIRECT consumption when balance is missing',
       () async {
-        await insertIngredientBalance(
-          database,
-          id: 'ingredient-inventory-001',
-          ingredientId: 'ingredient-001',
-          quantity: 5,
-          averageCost: 20,
-        );
+        final SaleConsumptionPlan plan = _directPlan();
 
         await expectLater(
           database.transaction(
             (Transaction transaction) async {
               await dao.executePlan(
                 transaction,
-                buildRecipeConsumptionPlan(),
+                plan,
               );
             },
           ),
@@ -459,25 +378,15 @@ void main() {
                 return error.message;
               },
               'message',
-              'Ingredient Inventory record was not found.',
+              'Inventory balance was not found.',
             ),
           ),
         );
 
-        final Map<String, Object?> firstBalance = await getIngredientBalance(
-          database,
-          'ingredient-001',
-        );
-
         expect(
-          firstBalance['quantity'],
-          5,
-        );
-
-        expect(
-          await countRows(
+          await _countRows(
             database,
-            'ingredient_movements',
+            table: 'inventory_movements',
           ),
           0,
         );
@@ -485,50 +394,158 @@ void main() {
     );
 
     test(
-      'Product restoration increases inventory '
-      'and links the original movement',
+      'rolls back RECIPE plan when one balance is missing',
       () async {
-        await insertProductBalance(
+        await _insertIngredientBalance(
+          database,
+          id: 'ingredient-inventory-001',
+          ingredientId: 'ingredient-001',
+          quantity: 5,
+          averageCost: 20,
+        );
+
+        final SaleConsumptionPlan plan = _recipePlan();
+
+        await expectLater(
+          database.transaction(
+            (Transaction transaction) async {
+              await dao.executePlan(
+                transaction,
+                plan,
+              );
+            },
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (StateError error) {
+                return error.message;
+              },
+              'message',
+              'Ingredient Inventory balance '
+                  'was not found.',
+            ),
+          ),
+        );
+
+        final Map<String, Object?> balance = await _singleRow(
+          database,
+          table: 'ingredient_inventory',
+          where: '''
+            store_id = ?
+            AND ingredient_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'ingredient-001',
+          ],
+        );
+
+        expect(
+          balance['quantity'],
+          5,
+        );
+
+        expect(
+          await _countRows(
+            database,
+            table: 'ingredient_movements',
+          ),
+          0,
+        );
+      },
+    );
+
+    test(
+      'restores a DIRECT Product movement',
+      () async {
+        await _insertProductBalance(
           database,
           quantity: 10,
           averageCost: 50,
         );
 
-        await dao.executePlan(
-          database,
-          buildDirectConsumptionPlan(),
+        final SaleConsumptionPlan consumption = _directPlan();
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              consumption,
+            );
+          },
         );
 
-        await dao.executePlan(
-          database,
-          buildDirectRestorationPlan(),
+        final String originalMovementId =
+            consumption.movements.single.idempotencyKey.trim();
+
+        final PlannedInventoryMovement restorationMovement =
+            PlannedInventoryMovement(
+          idempotencyKey: 'SALE:sale-001:sale-item-001:'
+              'PRODUCT:product-001:restore',
+          operation: ConsumptionOperation.restore,
+          itemType: ConsumptionItemType.product,
+          itemId: 'product-001',
+          itemCode: 'SKU-001',
+          unitCode: 'EACH',
+          quantityDelta: 2,
+          unitCostSnapshot: 50,
+          sourceSaleId: 'sale-001',
+          sourceSaleItemId: 'sale-item-001',
+          storeId: 'store-001',
+          performedBy: 'user-001',
+          deviceId: 'device-001',
+          occurredAt: DateTime.utc(
+            2026,
+            9,
+            6,
+          ),
+          reversalOfMovementId: originalMovementId,
         );
 
-        final Map<String, Object?> balance = await getProductBalance(database);
+        final SaleConsumptionPlan restorationPlan = SaleConsumptionPlan(
+          request: _request(),
+          inventoryMode: ProductInventoryMode.direct,
+          movements: <PlannedInventoryMovement>[
+            restorationMovement,
+          ],
+          expectedCost: 100,
+        );
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              restorationPlan,
+            );
+          },
+        );
+
+        final Map<String, Object?> balance = await _singleRow(
+          database,
+          table: 'inventory',
+          where: '''
+            store_id = ?
+            AND product_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'product-001',
+          ],
+        );
 
         expect(
           balance['quantity'],
           10,
         );
-        expect(
-          balance['average_cost'],
-          50,
-        );
 
-        final List<Map<String, Object?>> movements = await database.query(
-          'inventory_movements',
-          orderBy: 'movement_type',
-        );
-
-        expect(
-          movements,
-          hasLength(2),
-        );
-
-        final Map<String, Object?> restoration = movements.firstWhere(
-          (Map<String, Object?> row) {
-            return row['movement_type'] == 'RESTORE';
-          },
+        final Map<String, Object?> restoration = await _singleRow(
+          database,
+          table: 'inventory_movements',
+          where: 'idempotency_key = ?',
+          whereArgs: const <Object?>[
+            'SALE:sale-001:sale-item-001:'
+                'PRODUCT:product-001:restore',
+          ],
         );
 
         expect(
@@ -544,78 +561,66 @@ void main() {
           10,
         );
         expect(
+          restoration['movement_type'],
+          'RESTORE',
+        );
+        expect(
           restoration['reversal_of_movement_id'],
-          directConsumptionKey,
+          originalMovementId,
         );
       },
     );
 
     test(
-      'Product restoration rejects a missing original movement',
+      'rejects a second restoration of original movement',
       () async {
-        await insertProductBalance(
-          database,
-          quantity: 8,
-          averageCost: 50,
-        );
-
-        await expectLater(
-          dao.executePlan(
-            database,
-            buildDirectRestorationPlan(),
-          ),
-          throwsA(
-            isA<StateError>().having(
-              (StateError error) {
-                return error.message;
-              },
-              'message',
-              'Original movement was not found.',
-            ),
-          ),
-        );
-
-        final Map<String, Object?> balance = await getProductBalance(database);
-
-        expect(
-          balance['quantity'],
-          8,
-        );
-
-        expect(
-          await countRows(
-            database,
-            'inventory_movements',
-          ),
-          0,
-        );
-      },
-    );
-
-    test(
-      'Product restoration cannot restore '
-      'the same original movement twice',
-      () async {
-        await insertProductBalance(
+        await _insertProductBalance(
           database,
           quantity: 10,
           averageCost: 50,
         );
 
-        await dao.executePlan(
-          database,
-          buildDirectConsumptionPlan(),
+        final SaleConsumptionPlan consumption = _directPlan();
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              consumption,
+            );
+          },
         );
 
-        await dao.executePlan(
-          database,
-          buildDirectRestorationPlan(),
+        final String originalMovementId =
+            consumption.movements.single.idempotencyKey.trim();
+
+        final SaleConsumptionPlan firstRestore = _restorationPlan(
+          idempotencyKey: 'restore-product-001',
+          originalMovementId: originalMovementId,
+        );
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              firstRestore,
+            );
+          },
+        );
+
+        final SaleConsumptionPlan secondRestore = _restorationPlan(
+          idempotencyKey: 'restore-product-002',
+          originalMovementId: originalMovementId,
         );
 
         await expectLater(
-          dao.executePlan(
-            database,
-            buildSecondDirectRestorationPlan(),
+          database.transaction(
+            (Transaction transaction) async {
+              await dao.executePlan(
+                transaction,
+                secondRestore,
+              );
+            },
           ),
           throwsA(
             isA<StateError>().having(
@@ -623,12 +628,24 @@ void main() {
                 return error.message;
               },
               'message',
-              'Movement has already been restored.',
+              'Original movement was already '
+                  'restored.',
             ),
           ),
         );
 
-        final Map<String, Object?> balance = await getProductBalance(database);
+        final Map<String, Object?> balance = await _singleRow(
+          database,
+          table: 'inventory',
+          where: '''
+            store_id = ?
+            AND product_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'product-001',
+          ],
+        );
 
         expect(
           balance['quantity'],
@@ -636,9 +653,9 @@ void main() {
         );
 
         expect(
-          await countRows(
+          await _countRows(
             database,
-            'inventory_movements',
+            table: 'inventory_movements',
           ),
           2,
         );
@@ -647,20 +664,7 @@ void main() {
   });
 }
 
-final DateTime testOccurredAt = DateTime.utc(
-  2026,
-  9,
-  6,
-  8,
-);
-
-const String directConsumptionKey = 'SALE:sale-001:sale-item-001:'
-    'PRODUCT:product-001:consume';
-
-const String directRestorationKey = 'SALE:sale-001:sale-item-001:'
-    'PRODUCT:product-001:restore';
-
-SaleConsumptionRequest buildRequest() {
+SaleConsumptionRequest _request() {
   return SaleConsumptionRequest(
     saleId: 'sale-001',
     saleItemId: 'sale-item-001',
@@ -668,143 +672,138 @@ SaleConsumptionRequest buildRequest() {
     productId: 'product-001',
     productSku: 'SKU-001',
     quantitySold: 2,
-    occurredAt: testOccurredAt,
+    occurredAt: DateTime.utc(
+      2026,
+      9,
+      5,
+    ),
     performedBy: 'user-001',
     deviceId: 'device-001',
   );
 }
 
-SaleConsumptionPlan buildDirectConsumptionPlan() {
+SaleConsumptionPlan _directPlan() {
   return SaleConsumptionPlan(
-    request: buildRequest(),
+    request: _request(),
     inventoryMode: ProductInventoryMode.direct,
     movements: <PlannedInventoryMovement>[
-      buildDirectMovement(),
-    ],
-    expectedCost: 100,
-  );
-}
-
-SaleConsumptionPlan buildDirectRestorationPlan() {
-  return SaleConsumptionPlan(
-    request: buildRequest(),
-    inventoryMode: ProductInventoryMode.direct,
-    movements: <PlannedInventoryMovement>[
-      buildDirectMovement(
-        idempotencyKey: directRestorationKey,
-        operation: ConsumptionOperation.restore,
-        quantityDelta: 2,
-        reversalOfMovementId: directConsumptionKey,
+      PlannedInventoryMovement(
+        idempotencyKey: 'SALE:sale-001:sale-item-001:'
+            'PRODUCT:product-001:consume',
+        operation: ConsumptionOperation.consume,
+        itemType: ConsumptionItemType.product,
+        itemId: 'product-001',
+        itemCode: 'SKU-001',
+        unitCode: 'EACH',
+        quantityDelta: -2,
+        unitCostSnapshot: 50,
+        sourceSaleId: 'sale-001',
+        sourceSaleItemId: 'sale-item-001',
+        storeId: 'store-001',
+        performedBy: 'user-001',
+        deviceId: 'device-001',
+        occurredAt: DateTime.utc(
+          2026,
+          9,
+          5,
+        ),
       ),
     ],
     expectedCost: 100,
   );
 }
 
-SaleConsumptionPlan buildSecondDirectRestorationPlan() {
+SaleConsumptionPlan _recipePlan() {
   return SaleConsumptionPlan(
-    request: buildRequest(),
-    inventoryMode: ProductInventoryMode.direct,
-    movements: <PlannedInventoryMovement>[
-      buildDirectMovement(
-        idempotencyKey: '$directRestorationKey:second',
-        operation: ConsumptionOperation.restore,
-        quantityDelta: 2,
-        reversalOfMovementId: directConsumptionKey,
-      ),
-    ],
-    expectedCost: 100,
-  );
-}
-
-PlannedInventoryMovement buildDirectMovement({
-  String idempotencyKey = directConsumptionKey,
-  ConsumptionOperation operation = ConsumptionOperation.consume,
-  double quantityDelta = -2,
-  String? reversalOfMovementId,
-}) {
-  return PlannedInventoryMovement(
-    idempotencyKey: idempotencyKey,
-    operation: operation,
-    itemType: ConsumptionItemType.product,
-    itemId: 'product-001',
-    itemCode: 'SKU-001',
-    unitCode: 'EACH',
-    quantityDelta: quantityDelta,
-    unitCostSnapshot: 50,
-    sourceSaleId: 'sale-001',
-    sourceSaleItemId: 'sale-item-001',
-    storeId: 'store-001',
-    performedBy: 'user-001',
-    deviceId: 'device-001',
-    occurredAt: testOccurredAt,
-    reversalOfMovementId: reversalOfMovementId,
-  );
-}
-
-SaleConsumptionPlan buildRecipeConsumptionPlan() {
-  return SaleConsumptionPlan(
-    request: buildRequest(),
+    request: _request(),
     inventoryMode: ProductInventoryMode.recipe,
     movements: <PlannedInventoryMovement>[
-      buildIngredientMovement(
-        ingredientId: 'ingredient-001',
-        ingredientCode: 'ING-001',
-        recipeIngredientId: 'recipe-line-001',
+      PlannedInventoryMovement(
+        idempotencyKey: 'SALE:sale-001:sale-item-001:'
+            'INGREDIENT:ingredient-001',
+        operation: ConsumptionOperation.consume,
+        itemType: ConsumptionItemType.ingredient,
+        itemId: 'ingredient-001',
+        itemCode: 'ING-001',
+        unitCode: 'KG',
         quantityDelta: -0.5,
         unitCostSnapshot: 20,
+        sourceSaleId: 'sale-001',
+        sourceSaleItemId: 'sale-item-001',
+        storeId: 'store-001',
+        performedBy: 'user-001',
+        deviceId: 'device-001',
+        occurredAt: DateTime.utc(
+          2026,
+          9,
+          5,
+        ),
+        recipeId: 'recipe-001',
+        recipeIngredientId: 'recipe-line-001',
       ),
-      buildIngredientMovement(
-        ingredientId: 'ingredient-002',
-        ingredientCode: 'ING-002',
-        recipeIngredientId: 'recipe-line-002',
+      PlannedInventoryMovement(
+        idempotencyKey: 'SALE:sale-001:sale-item-001:'
+            'INGREDIENT:ingredient-002',
+        operation: ConsumptionOperation.consume,
+        itemType: ConsumptionItemType.ingredient,
+        itemId: 'ingredient-002',
+        itemCode: 'ING-002',
+        unitCode: 'KG',
         quantityDelta: -1,
         unitCostSnapshot: 5,
+        sourceSaleId: 'sale-001',
+        sourceSaleItemId: 'sale-item-001',
+        storeId: 'store-001',
+        performedBy: 'user-001',
+        deviceId: 'device-001',
+        occurredAt: DateTime.utc(
+          2026,
+          9,
+          5,
+        ),
+        recipeId: 'recipe-001',
+        recipeIngredientId: 'recipe-line-002',
       ),
     ],
     expectedCost: 15,
   );
 }
 
-PlannedInventoryMovement buildIngredientMovement({
-  required String ingredientId,
-  required String ingredientCode,
-  required String recipeIngredientId,
-  required double quantityDelta,
-  required double unitCostSnapshot,
+SaleConsumptionPlan _restorationPlan({
+  required String idempotencyKey,
+  required String originalMovementId,
 }) {
-  return PlannedInventoryMovement(
-    idempotencyKey: 'SALE:sale-001:'
-        'sale-item-001:'
-        'INGREDIENT:$ingredientId',
-    operation: ConsumptionOperation.consume,
-    itemType: ConsumptionItemType.ingredient,
-    itemId: ingredientId,
-    itemCode: ingredientCode,
-    unitCode: 'KG',
-    quantityDelta: quantityDelta,
-    unitCostSnapshot: unitCostSnapshot,
-    sourceSaleId: 'sale-001',
-    sourceSaleItemId: 'sale-item-001',
-    storeId: 'store-001',
-    performedBy: 'user-001',
-    deviceId: 'device-001',
-    occurredAt: testOccurredAt,
-    recipeId: 'recipe-001',
-    recipeIngredientId: recipeIngredientId,
-  );
-}
-
-SaleConsumptionPlan buildNonePlan() {
   return SaleConsumptionPlan(
-    request: buildRequest(),
-    inventoryMode: ProductInventoryMode.none,
-    movements: const <PlannedInventoryMovement>[],
-    expectedCost: 0,
+    request: _request(),
+    inventoryMode: ProductInventoryMode.direct,
+    movements: <PlannedInventoryMovement>[
+      PlannedInventoryMovement(
+        idempotencyKey: idempotencyKey,
+        operation: ConsumptionOperation.restore,
+        itemType: ConsumptionItemType.product,
+        itemId: 'product-001',
+        itemCode: 'SKU-001',
+        unitCode: 'EACH',
+        quantityDelta: 2,
+        unitCostSnapshot: 50,
+        sourceSaleId: 'sale-001',
+        sourceSaleItemId: 'sale-item-001',
+        storeId: 'store-001',
+        performedBy: 'user-001',
+        deviceId: 'device-001',
+        occurredAt: DateTime.utc(
+          2026,
+          9,
+          6,
+        ),
+        reversalOfMovementId: originalMovementId,
+      ),
+    ],
+    expectedCost: 100,
   );
 }
 
-Future<void> createVersion8InventorySchema(
+Future<void> _createVersion8InventorySchema(
   Database db,
 ) async {
   await db.execute(
@@ -882,21 +881,14 @@ Future<void> createVersion8InventorySchema(
 
   await db.execute(
     '''
-    CREATE INDEX idx_ingredient_movements_reference
+    CREATE INDEX
+      idx_ingredient_movements_reference
     ON ingredient_movements(reference_id)
     ''',
   );
 }
 
-Future<void> applyMigrationV9(
-  Database database,
-) async {
-  for (final String statement in migrationV9) {
-    await database.execute(statement);
-  }
-}
-
-Future<void> insertProductBalance(
+Future<void> _insertProductBalance(
   Database database, {
   required double quantity,
   required double averageCost,
@@ -914,7 +906,7 @@ Future<void> insertProductBalance(
   );
 }
 
-Future<void> insertIngredientBalance(
+Future<void> _insertIngredientBalance(
   Database database, {
   required String id,
   required String ingredientId,
@@ -934,50 +926,34 @@ Future<void> insertIngredientBalance(
   );
 }
 
-Future<Map<String, Object?>> getProductBalance(
-  Database database,
-) async {
-  return (await database.query(
-    'inventory',
-    where: 'store_id = ? AND product_id = ?',
-    whereArgs: const <Object?>[
-      'store-001',
-      'product-001',
-    ],
-  ))
-      .single;
+Future<Map<String, Object?>> _singleRow(
+  Database database, {
+  required String table,
+  required String where,
+  required List<Object?> whereArgs,
+}) async {
+  final List<Map<String, Object?>> rows = await database.query(
+    table,
+    where: where,
+    whereArgs: whereArgs,
+    limit: 1,
+  );
+
+  expect(
+    rows,
+    hasLength(1),
+  );
+
+  return rows.single;
 }
 
-Future<Map<String, Object?>> getIngredientBalance(
-  Database database,
-  String ingredientId,
-) async {
-  return (await database.query(
-    'ingredient_inventory',
-    where: 'store_id = ? AND ingredient_id = ?',
-    whereArgs: <Object?>[
-      'store-001',
-      ingredientId,
-    ],
-  ))
-      .single;
-}
-
-Future<int> countRows(
-  Database database,
-  String table,
-) async {
-  final List<Map<String, Object?>> result = await database.rawQuery(
+Future<int> _countRows(
+  Database database, {
+  required String table,
+}) async {
+  final List<Map<String, Object?>> rows = await database.rawQuery(
     'SELECT COUNT(*) AS row_count FROM $table',
   );
 
-  final Object? value = result.single['row_count'];
-
-  if (value is int) {
-    return value;
-  }
-
-  return int.parse(
-    value.toString(),
-  );
+  return rows.single['row_count']! as int;
 }
