@@ -164,7 +164,7 @@ class SaleConsumptionDao {
 
     if (rows.isEmpty) {
       throw StateError(
-        'Product Inventory record was not found.',
+        'Inventory balance was not found.',
       );
     }
 
@@ -193,7 +193,7 @@ class SaleConsumptionDao {
 
     if (rows.isEmpty) {
       throw StateError(
-        'Ingredient Inventory record was not found.',
+        'Ingredient Inventory balance was not found.',
       );
     }
 
@@ -210,7 +210,9 @@ class SaleConsumptionDao {
     required double beforeQuantity,
     required double afterQuantity,
   }) async {
-    final String movementId = movement.idempotencyKey.trim();
+    final String movementId = _movementId(
+      movement,
+    );
 
     await database.insert(
       table,
@@ -241,6 +243,24 @@ class SaleConsumptionDao {
     );
   }
 
+  Future<bool> hasProcessedMovement(
+    DatabaseExecutor database,
+    PlannedInventoryMovement movement,
+  ) async {
+    movement.validate();
+
+    final String table = switch (movement.itemType) {
+      ConsumptionItemType.product => 'inventory_movements',
+      ConsumptionItemType.ingredient => 'ingredient_movements',
+    };
+
+    return _movementExists(
+      database,
+      table: table,
+      movement: movement,
+    );
+  }
+
   Future<bool> _movementExists(
     DatabaseExecutor database, {
     required String table,
@@ -260,6 +280,12 @@ class SaleConsumptionDao {
 
     final bool movementExists = rows.isNotEmpty;
     return movementExists;
+  }
+
+  String _movementId(
+    PlannedInventoryMovement movement,
+  ) {
+    return movement.idempotencyKey.trim();
   }
 
   String _movementRemarks(
@@ -337,7 +363,7 @@ class SaleConsumptionDao {
 
     if (reversalRows.isNotEmpty) {
       throw StateError(
-        'Movement has already been restored.',
+        'Original movement was already restored.',
       );
     }
   }
