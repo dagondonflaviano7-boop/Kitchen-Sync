@@ -322,6 +322,103 @@ void main() {
     );
 
     test(
+      'does not apply duplicate RECIPE movements twice',
+      () async {
+        await _insertIngredientBalance(
+          database,
+          id: 'ingredient-inventory-001',
+          ingredientId: 'ingredient-001',
+          quantity: 5,
+          averageCost: 20,
+        );
+
+        await _insertIngredientBalance(
+          database,
+          id: 'ingredient-inventory-002',
+          ingredientId: 'ingredient-002',
+          quantity: 8,
+          averageCost: 5,
+        );
+
+        final SaleConsumptionPlan plan = _recipePlan();
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              plan,
+            );
+          },
+        );
+
+        await database.transaction(
+          (Transaction transaction) async {
+            await dao.executePlan(
+              transaction,
+              plan,
+            );
+          },
+        );
+
+        final Map<String, Object?> firstBalance = await _singleRow(
+          database,
+          table: 'ingredient_inventory',
+          where: '''
+            store_id = ?
+            AND ingredient_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'ingredient-001',
+          ],
+        );
+
+        final Map<String, Object?> secondBalance = await _singleRow(
+          database,
+          table: 'ingredient_inventory',
+          where: '''
+            store_id = ?
+            AND ingredient_id = ?
+          ''',
+          whereArgs: const <Object?>[
+            'store-001',
+            'ingredient-002',
+          ],
+        );
+
+        expect(
+          firstBalance['quantity'],
+          4.5,
+        );
+
+        expect(
+          secondBalance['quantity'],
+          7,
+        );
+
+        final int movementCount = await _countRows(
+          database,
+          table: 'ingredient_movements',
+        );
+
+        expect(
+          movementCount,
+          2,
+        );
+
+        for (final PlannedInventoryMovement movement in plan.movements) {
+          expect(
+            await dao.hasProcessedMovement(
+              database,
+              movement,
+            ),
+            isTrue,
+          );
+        }
+      },
+    );
+
+    test(
       'executes NONE Product plan without inventory writes',
       () async {
         final SaleConsumptionPlan plan = SaleConsumptionPlan(
