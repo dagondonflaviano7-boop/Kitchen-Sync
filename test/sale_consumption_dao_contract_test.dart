@@ -266,43 +266,6 @@ void main() {
       );
     });
 
-    test('stores Ingredient Recipe lineage', () {
-      expect(
-        source,
-        contains(
-          "'recipe_id'",
-        ),
-      );
-
-      expect(
-        source,
-        contains(
-          'movement.recipeId',
-        ),
-      );
-
-      expect(
-        source,
-        contains(
-          "'recipe_ingredient_id'",
-        ),
-      );
-
-      expect(
-        source,
-        contains(
-          'movement.recipeIngredientId',
-        ),
-      );
-
-      expect(
-        source,
-        contains(
-          'movement.isIngredientMovement',
-        ),
-      );
-    });
-
     test('stores historical unit cost snapshot', () {
       expect(
         source,

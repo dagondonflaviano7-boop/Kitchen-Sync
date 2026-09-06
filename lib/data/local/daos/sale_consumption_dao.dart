@@ -238,10 +238,6 @@ class SaleConsumptionDao {
         'source_sale_item_id': movement.sourceSaleItemId,
         'reversal_of_movement_id': movement.reversalOfMovementId,
         'unit_cost_snapshot': movement.unitCostSnapshot,
-        if (movement.isIngredientMovement)
-          'recipe_id': movement.recipeId?.trim(),
-        if (movement.isIngredientMovement)
-          'recipe_ingredient_id': movement.recipeIngredientId?.trim(),
       },
       conflictAlgorithm: ConflictAlgorithm.abort,
     );
