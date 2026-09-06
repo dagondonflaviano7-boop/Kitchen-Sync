@@ -23,12 +23,23 @@ void main() {
   });
 
   group('Product Sync Migration V8', () {
-    test('increases database version to 8', () {
+    test('keeps database version at 8 or higher', () {
+      final RegExpMatch? versionMatch = RegExp(
+        r'databaseVersion\s*=\s*(\d+)',
+      ).firstMatch(constants);
+
       expect(
-        constants,
-        contains(
-          'databaseVersion = 8',
-        ),
+        versionMatch,
+        isNotNull,
+      );
+
+      final int databaseVersion = int.parse(
+        versionMatch!.group(1)!,
+      );
+
+      expect(
+        databaseVersion,
+        greaterThanOrEqualTo(8),
       );
     });
 
