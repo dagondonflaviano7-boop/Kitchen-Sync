@@ -1,4 +1,5 @@
 import 'package:kitchen_sync/domain/models/sale_posting.dart';
+import 'package:kitchen_sync/domain/models/sale_posting_costing.dart';
 import 'package:sqflite/sqflite.dart';
 
 class SalePostingDao {
@@ -42,8 +43,15 @@ class SalePostingDao {
   Future<void> insertSale(
     DatabaseExecutor database,
     SalePostingRequest request,
+    SalePostingCostingSnapshot costing,
   ) async {
     request.validate();
+    costing.validate();
+
+    _validateCostingOwnership(
+      request,
+      costing,
+    );
 
     await database.insert(
       'sales',
@@ -59,10 +67,10 @@ class SalePostingDao {
         'vat': 0.0,
         'net_sales': request.grandTotal,
         'grand_total': request.grandTotal,
-        'cost': 0.0,
-        'cogs': 0.0,
-        'gross_profit': 0.0,
-        'gross_margin': 0.0,
+        'cost': costing.totalCost,
+        'cogs': costing.totalCogs,
+        'gross_profit': costing.grossProfit,
+        'gross_margin': costing.grossMargin,
         'status': 'COMPLETED',
         'sync_status': 'PENDING',
       },
@@ -73,11 +81,31 @@ class SalePostingDao {
   Future<void> insertSaleItems(
     DatabaseExecutor database,
     SalePostingRequest request,
+    SalePostingCostingSnapshot costing,
   ) async {
     request.validate();
+    costing.validate();
+
+    _validateCostingOwnership(
+      request,
+      costing,
+    );
 
     for (final SalePostingItem item in request.items) {
       item.validate();
+
+      final SalePostingItemCostSnapshot itemCost = costing.itemCostFor(
+        item.id,
+      );
+
+      itemCost.validate();
+
+      if (itemCost.saleItemId.trim() != item.id.trim() ||
+          itemCost.productId.trim() != item.productId.trim()) {
+        throw const FormatException(
+          'Cost snapshot does not match the Sale Item.',
+        );
+      }
 
       await database.insert(
         'sale_items',
@@ -91,10 +119,10 @@ class SalePostingDao {
           'selling_price': item.sellingPrice,
           'discount': item.discount,
           'net_amount': item.netAmount,
-          'unit_cost': 0.0,
-          'cogs': 0.0,
-          'recipe_version': null,
-          'ingredient_cost_json': null,
+          'unit_cost': itemCost.unitCost,
+          'cogs': itemCost.cogs,
+          'recipe_version': itemCost.recipeVersion,
+          'ingredient_cost_json': itemCost.ingredientCostJson,
         },
         conflictAlgorithm: ConflictAlgorithm.abort,
       );
@@ -130,8 +158,15 @@ class SalePostingDao {
   Future<void> insertPosting(
     DatabaseExecutor database,
     SalePostingRequest request,
+    SalePostingCostingSnapshot costing,
   ) async {
     request.validate();
+    costing.validate();
+
+    _validateCostingOwnership(
+      request,
+      costing,
+    );
 
     final bool alreadyPosted = await saleExists(
       database,
@@ -148,17 +183,57 @@ class SalePostingDao {
     await insertSale(
       database,
       request,
+      costing,
     );
 
     await insertSaleItems(
       database,
       request,
+      costing,
     );
 
     await insertPayments(
       database,
       request,
     );
+  }
+
+  void _validateCostingOwnership(
+    SalePostingRequest request,
+    SalePostingCostingSnapshot costing,
+  ) {
+    if (costing.saleId.trim() != request.saleId.trim()) {
+      throw const FormatException(
+        'Costing snapshot does not belong to the Sale.',
+      );
+    }
+
+    if (costing.request.saleId.trim() != request.saleId.trim()) {
+      throw const FormatException(
+        'Costing snapshot does not belong to the Sale.',
+      );
+    }
+
+    if (costing.items.length != request.items.length) {
+      throw const FormatException(
+        'Every Sale Item must have exactly one cost snapshot.',
+      );
+    }
+
+    for (final SalePostingItem item in request.items) {
+      final SalePostingItemCostSnapshot itemCost = costing.itemCostFor(
+        item.id,
+      );
+
+      itemCost.validate();
+
+      if (itemCost.saleItemId.trim() != item.id.trim() ||
+          itemCost.productId.trim() != item.productId.trim()) {
+        throw const FormatException(
+          'Cost snapshot does not match the Sale Item.',
+        );
+      }
+    }
   }
 }
 

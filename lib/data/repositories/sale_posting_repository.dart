@@ -7,6 +7,7 @@ import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/domain/models/sale_consumption.dart';
 import 'package:kitchen_sync/domain/models/sale_posting.dart';
+import 'package:kitchen_sync/domain/models/sale_posting_costing.dart';
 import 'package:kitchen_sync/domain/services/sale_consumption_planner.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -16,6 +17,7 @@ class SalePostingRepository {
   final SalePostingDao salePostingDao;
   final SaleConsumptionDao saleConsumptionDao;
   final SaleConsumptionPlanner saleConsumptionPlanner;
+  final SalePostingCostingPlanner salePostingCostingPlanner;
 
   const SalePostingRepository({
     this.productDao = const ProductDao(),
@@ -23,6 +25,7 @@ class SalePostingRepository {
     this.salePostingDao = const SalePostingDao(),
     this.saleConsumptionDao = const SaleConsumptionDao(),
     this.saleConsumptionPlanner = const SaleConsumptionPlanner(),
+    this.salePostingCostingPlanner = const SalePostingCostingPlanner(),
   });
 
   Future<void> postSale(
@@ -102,9 +105,18 @@ class SalePostingRepository {
           plans.add(plan);
         }
 
+        final SalePostingCostingSnapshot costing =
+            salePostingCostingPlanner.createSnapshot(
+          request: request,
+          plans: plans,
+        );
+
+        costing.validate();
+
         await salePostingDao.insertPosting(
           transaction,
           request,
+          costing,
         );
 
         for (final SaleConsumptionPlan plan in plans) {

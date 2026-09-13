@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_sync/data/local/daos/sale_posting_dao.dart';
 import 'package:kitchen_sync/data/local/migrations/migration_v1.dart';
 import 'package:kitchen_sync/domain/models/sale_posting.dart';
+import 'package:kitchen_sync/domain/models/product.dart';
+import 'package:kitchen_sync/domain/models/sale_posting_costing.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -107,6 +109,77 @@ void main() {
     );
   }
 
+  SalePostingCostingSnapshot buildCosting(
+    SalePostingRequest request, {
+    ProductInventoryMode inventoryMode = ProductInventoryMode.direct,
+    double unitCost = 25,
+    String? recipeId,
+    String? ingredientCostJson,
+  }) {
+    final List<SalePostingItemCostSnapshot> itemCosts = request.items.map(
+      (SalePostingItem item) {
+        final bool ignoresInventory =
+            inventoryMode == ProductInventoryMode.none;
+
+        final double resolvedUnitCost = ignoresInventory ? 0 : unitCost;
+
+        final double resolvedCogs = item.quantity * resolvedUnitCost;
+
+        return SalePostingItemCostSnapshot(
+          saleItemId: item.id.trim(),
+          productId: item.productId.trim(),
+          inventoryMode: inventoryMode,
+          quantity: item.quantity,
+          netAmount: item.netAmount,
+          unitCost: resolvedUnitCost,
+          cogs: resolvedCogs,
+          recipeId: inventoryMode == ProductInventoryMode.recipe
+              ? recipeId ?? 'recipe-001'
+              : null,
+          recipeVersion: null,
+          ingredientCostJson: inventoryMode == ProductInventoryMode.recipe
+              ? ingredientCostJson ??
+                  '{"recipeId":"recipe-001",'
+                      '"ingredients":[],'
+                      '"totalIngredientCost":'
+                      '${resolvedCogs.toString()}}'
+              : null,
+        );
+      },
+    ).toList(growable: false);
+
+    final SalePostingCostingSnapshot costing = SalePostingCostingSnapshot(
+      saleId: request.saleId.trim(),
+      request: request,
+      items: itemCosts,
+    );
+
+    costing.validate();
+    return costing;
+  }
+
+  Future<void> insertPostingWithCost(
+    DatabaseExecutor database,
+    SalePostingRequest request,
+  ) async {
+    await dao.insertPosting(
+      database,
+      request,
+      buildCosting(request),
+    );
+  }
+
+  Future<void> insertSaleWithCost(
+    DatabaseExecutor database,
+    SalePostingRequest request,
+  ) async {
+    await dao.insertSale(
+      database,
+      request,
+      buildCosting(request),
+    );
+  }
+
   Future<int> tableCount(
     String table,
   ) async {
@@ -125,7 +198,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               request,
             );
@@ -197,22 +270,25 @@ void main() {
 
         expect(
           sale['cost'],
-          0.0,
+          50.0,
         );
 
         expect(
           sale['cogs'],
-          0.0,
+          50.0,
         );
 
         expect(
           sale['gross_profit'],
-          0.0,
+          130.0,
         );
 
         expect(
           sale['gross_margin'],
-          0.0,
+          closeTo(
+            72.222222,
+            0.0001,
+          ),
         );
 
         expect(
@@ -243,7 +319,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               request,
             );
@@ -300,12 +376,12 @@ void main() {
 
         expect(
           item['unit_cost'],
-          0.0,
+          25.0,
         );
 
         expect(
           item['cogs'],
-          0.0,
+          50.0,
         );
 
         expect(
@@ -335,7 +411,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               request,
             );
@@ -395,7 +471,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               request,
             );
@@ -428,7 +504,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               request,
             );
@@ -467,7 +543,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               first,
             );
@@ -477,7 +553,7 @@ void main() {
         await expectLater(
           database.transaction(
             (Transaction transaction) async {
-              await dao.insertPosting(
+              await insertPostingWithCost(
                 transaction,
                 duplicate,
               );
@@ -525,7 +601,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               first,
             );
@@ -534,7 +610,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               second,
             );
@@ -572,7 +648,7 @@ void main() {
         await expectLater(
           database.transaction(
             (Transaction transaction) async {
-              await dao.insertPosting(
+              await insertPostingWithCost(
                 transaction,
                 invalid,
               );
@@ -601,7 +677,7 @@ void main() {
     test(
       'rolls back sale when item insertion fails',
       () async {
-        await dao.insertSale(
+        await insertSaleWithCost(
           database,
           buildRequest(
             saleId: 'existing-sale',
@@ -644,7 +720,7 @@ void main() {
         await expectLater(
           database.transaction(
             (Transaction transaction) async {
-              await dao.insertPosting(
+              await insertPostingWithCost(
                 transaction,
                 request,
               );
@@ -678,7 +754,7 @@ void main() {
     test(
       'rolls back sale and items when payment insertion fails',
       () async {
-        await dao.insertSale(
+        await insertSaleWithCost(
           database,
           buildRequest(
             saleId: 'existing-sale',
@@ -718,7 +794,7 @@ void main() {
         await expectLater(
           database.transaction(
             (Transaction transaction) async {
-              await dao.insertPosting(
+              await insertPostingWithCost(
                 transaction,
                 request,
               );
@@ -780,7 +856,7 @@ void main() {
 
         await database.transaction(
           (Transaction transaction) async {
-            await dao.insertPosting(
+            await insertPostingWithCost(
               transaction,
               request,
             );

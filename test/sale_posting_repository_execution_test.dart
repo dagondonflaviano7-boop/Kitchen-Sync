@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_sync/core/constants/app_constants.dart';
 import 'package:kitchen_sync/data/local/daos/product_dao.dart';
@@ -1081,6 +1083,391 @@ void main() {
         expect(
           await ingredientInventoryQuantity(),
           500,
+        );
+      },
+    );
+    test(
+      'persists authoritative costing for mixed '
+      'DIRECT RECIPE and NONE basket',
+      () async {
+        await insertProduct(
+          buildProduct(
+            id: 'product-001',
+            sku: 'SKU-001',
+            productName: 'Direct Product',
+            cost: 25,
+            inventoryMode: ProductInventoryMode.direct,
+          ),
+        );
+
+        await insertProductInventory(
+          id: 'inventory-direct',
+          productId: 'product-001',
+          quantity: 20,
+          averageCost: 25,
+        );
+
+        await insertIngredient();
+        await insertIngredientInventory();
+
+        await insertRecipe(
+          buildRecipe(),
+        );
+
+        await insertProduct(
+          buildProduct(
+            id: 'product-002',
+            sku: 'SKU-002',
+            productName: 'Recipe Product',
+            cost: 0,
+            retailPrice: 80,
+            inventoryMode: ProductInventoryMode.recipe,
+            recipeId: 'recipe-001',
+          ),
+        );
+
+        await insertProduct(
+          buildProduct(
+            id: 'product-003',
+            sku: 'SKU-003',
+            productName: 'Non Inventory Product',
+            cost: 0,
+            retailPrice: 20,
+            inventoryMode: ProductInventoryMode.none,
+          ),
+        );
+
+        final SalePostingRequest request = buildRequest(
+          saleId: 'sale-mixed-001',
+          transactionNumber: 'TXN-MIXED-001',
+          items: <SalePostingItem>[
+            buildItem(
+              id: 'sale-item-direct',
+              productId: 'product-001',
+              productSku: 'SKU-001',
+              productName: 'Direct Product',
+              quantity: 2,
+              sellingPrice: 100,
+              discount: 20,
+            ),
+            buildItem(
+              id: 'sale-item-recipe',
+              productId: 'product-002',
+              productSku: 'SKU-002',
+              productName: 'Recipe Product',
+              quantity: 1,
+              sellingPrice: 80,
+              discount: 0,
+            ),
+            buildItem(
+              id: 'sale-item-none',
+              productId: 'product-003',
+              productSku: 'SKU-003',
+              productName: 'Non Inventory Product',
+              quantity: 1,
+              sellingPrice: 20,
+              discount: 0,
+            ),
+          ],
+          payments: <SalePostingPayment>[
+            buildPayment(
+              id: 'payment-mixed-001',
+              amount: 280,
+            ),
+          ],
+        );
+
+        await repository.postSale(request);
+
+        expect(
+          await tableCount('sales'),
+          1,
+        );
+
+        expect(
+          await tableCount('sale_items'),
+          3,
+        );
+
+        expect(
+          await tableCount('payments'),
+          1,
+        );
+
+        expect(
+          await tableCount('inventory_movements'),
+          1,
+        );
+
+        expect(
+          await tableCount('ingredient_movements'),
+          1,
+        );
+
+        final Map<String, Object?> sale = (await database.query(
+          'sales',
+          where: 'id = ?',
+          whereArgs: const <Object?>[
+            'sale-mixed-001',
+          ],
+        ))
+            .single;
+
+        expect(
+          sale['subtotal'],
+          300.0,
+        );
+
+        expect(
+          sale['discount'],
+          20.0,
+        );
+
+        expect(
+          sale['net_sales'],
+          280.0,
+        );
+
+        expect(
+          sale['grand_total'],
+          280.0,
+        );
+
+        expect(
+          sale['cost'],
+          52.5,
+        );
+
+        expect(
+          sale['cogs'],
+          52.5,
+        );
+
+        expect(
+          sale['gross_profit'],
+          227.5,
+        );
+
+        expect(
+          sale['gross_margin'],
+          closeTo(
+            81.25,
+            0.0001,
+          ),
+        );
+
+        final List<Map<String, Object?>> persistedItems = await database.query(
+          'sale_items',
+          where: 'transaction_id = ?',
+          whereArgs: const <Object?>[
+            'sale-mixed-001',
+          ],
+          orderBy: 'id',
+        );
+
+        expect(
+          persistedItems,
+          hasLength(3),
+        );
+
+        final Map<String, Object?> directItem = persistedItems.firstWhere(
+          (Map<String, Object?> row) {
+            return row['id'] == 'sale-item-direct';
+          },
+        );
+
+        expect(
+          directItem['unit_cost'],
+          25.0,
+        );
+
+        expect(
+          directItem['cogs'],
+          50.0,
+        );
+
+        expect(
+          directItem['recipe_version'],
+          isNull,
+        );
+
+        expect(
+          directItem['ingredient_cost_json'],
+          isNull,
+        );
+
+        final Map<String, Object?> recipeItem = persistedItems.firstWhere(
+          (Map<String, Object?> row) {
+            return row['id'] == 'sale-item-recipe';
+          },
+        );
+
+        expect(
+          recipeItem['unit_cost'],
+          2.5,
+        );
+
+        expect(
+          recipeItem['cogs'],
+          2.5,
+        );
+
+        expect(
+          recipeItem['recipe_version'],
+          isNull,
+        );
+
+        expect(
+          recipeItem['ingredient_cost_json'],
+          isNotNull,
+        );
+
+        final Map<String, dynamic> recipeCostJson = jsonDecode(
+          recipeItem['ingredient_cost_json']! as String,
+        ) as Map<String, dynamic>;
+
+        expect(
+          recipeCostJson['recipeId'],
+          'recipe-001',
+        );
+
+        expect(
+          recipeCostJson['totalIngredientCost'],
+          2.5,
+        );
+
+        final List<dynamic> ingredientCosts =
+            recipeCostJson['ingredients'] as List<dynamic>;
+
+        expect(
+          ingredientCosts,
+          hasLength(1),
+        );
+
+        final Map<String, dynamic> ingredientCost =
+            ingredientCosts.single as Map<String, dynamic>;
+
+        expect(
+          ingredientCost['recipeIngredientId'],
+          'recipe-line-001',
+        );
+
+        expect(
+          ingredientCost['ingredientId'],
+          'ingredient-001',
+        );
+
+        expect(
+          ingredientCost['ingredientCode'],
+          'ING-001',
+        );
+
+        expect(
+          ingredientCost['unitCode'],
+          'GRAM',
+        );
+
+        expect(
+          ingredientCost['quantity'],
+          50.0,
+        );
+
+        expect(
+          ingredientCost['unitCost'],
+          0.05,
+        );
+
+        expect(
+          ingredientCost['extendedCost'],
+          2.5,
+        );
+
+        final Map<String, Object?> noneItem = persistedItems.firstWhere(
+          (Map<String, Object?> row) {
+            return row['id'] == 'sale-item-none';
+          },
+        );
+
+        expect(
+          noneItem['unit_cost'],
+          0.0,
+        );
+
+        expect(
+          noneItem['cogs'],
+          0.0,
+        );
+
+        expect(
+          noneItem['recipe_version'],
+          isNull,
+        );
+
+        expect(
+          noneItem['ingredient_cost_json'],
+          isNull,
+        );
+
+        expect(
+          await productInventoryQuantity(
+            productId: 'product-001',
+          ),
+          18,
+        );
+
+        expect(
+          await ingredientInventoryQuantity(),
+          450,
+        );
+
+        final Map<String, Object?> productMovement = (await database.query(
+          'inventory_movements',
+        ))
+            .single;
+
+        expect(
+          productMovement['source_sale_id'],
+          'sale-mixed-001',
+        );
+
+        expect(
+          productMovement['source_sale_item_id'],
+          'sale-item-direct',
+        );
+
+        expect(
+          productMovement['unit_cost_snapshot'],
+          25.0,
+        );
+
+        final Map<String, Object?> ingredientMovement = (await database.query(
+          'ingredient_movements',
+        ))
+            .single;
+
+        expect(
+          ingredientMovement['source_sale_id'],
+          'sale-mixed-001',
+        );
+
+        expect(
+          ingredientMovement['source_sale_item_id'],
+          'sale-item-recipe',
+        );
+
+        expect(
+          ingredientMovement['recipe_id'],
+          'recipe-001',
+        );
+
+        expect(
+          ingredientMovement['recipe_ingredient_id'],
+          'recipe-line-001',
+        );
+
+        expect(
+          ingredientMovement['unit_cost_snapshot'],
+          0.05,
         );
       },
     );
