@@ -23,11 +23,11 @@ void main() {
   });
 
   group('Ingredient Movement Recipe Lineage Migration V10', () {
-    test('increases database version to 10', () {
+    test('remains wired when database version advances to 11', () {
       expect(
         constants,
         contains(
-          'databaseVersion = 10',
+          'databaseVersion = 11',
         ),
       );
     });

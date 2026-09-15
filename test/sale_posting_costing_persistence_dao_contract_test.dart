@@ -372,7 +372,7 @@ void main() {
       );
     });
 
-    test('does not require a database migration', () {
+    test('remains valid after the restoration schema migration', () {
       final File constantsFile = File(
         'lib/core/constants/app_constants.dart',
       );
@@ -380,7 +380,7 @@ void main() {
       expect(
         constantsFile.readAsStringSync(),
         contains(
-          'databaseVersion = 10',
+          'databaseVersion = 11',
         ),
       );
 
@@ -388,7 +388,7 @@ void main() {
         File(
           'lib/data/local/migrations/migration_v11.dart',
         ).existsSync(),
-        isFalse,
+        isTrue,
       );
     });
   });
