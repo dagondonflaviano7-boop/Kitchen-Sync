@@ -8,6 +8,7 @@ import 'package:kitchen_sync/core/constants/app_constants.dart';
 import 'package:kitchen_sync/core/permissions/role.dart';
 import 'package:kitchen_sync/data/repositories/local_session_repository.dart';
 import 'package:kitchen_sync/features/master_data/presentation/master_data_hub.dart';
+import 'package:kitchen_sync/features/inventory/presentation/inventory_products_screen.dart';
 
 class AdaptiveShell extends StatefulWidget {
   final LocalSessionContext sessionContext;
@@ -135,15 +136,14 @@ class _AdaptiveShellState extends State<AdaptiveShell>
           icon: Icons.point_of_sale,
         ),
       ),
-      const _ShellDestination(
+      _ShellDestination(
         label: 'Inventory',
         railLabel: 'Inventory',
         icon: Icons.inventory_2_outlined,
         selectedIcon: Icons.inventory_2,
         permission: Permission.products,
-        page: _ModulePlaceholder(
-          title: 'Inventory',
-          icon: Icons.inventory_2,
+        page: InventoryProductsScreen(
+          storeId: widget.sessionContext.store.id,
         ),
       ),
       const _ShellDestination(
