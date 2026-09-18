@@ -5,6 +5,7 @@ import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:kitchen_sync/domain/models/unit_of_measure.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
 import 'package:kitchen_sync/features/master_data/products/presentation/product_form_screen.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 
 enum ProductStatusFilter {
   all,
@@ -217,6 +218,10 @@ class _ProductScreenState extends State<ProductScreen> {
       await _repository.setProductActive(
         product.id,
         !product.active,
+      );
+
+      await MasterDataAutoSync.instance.trigger(
+        reason: MasterDataAutoSyncReason.productStatusChanged,
       );
 
       await _loadProducts();

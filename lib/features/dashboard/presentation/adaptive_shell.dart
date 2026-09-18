@@ -241,9 +241,32 @@ class _AdaptiveShellState extends State<AdaptiveShell>
 
             return Scaffold(
               appBar: AppBar(
-                title: const Text(
-                  'KITCHEN SYNC',
-                ),
+                titleSpacing: 16,
+                title: tablet
+                    ? Row(
+                        children: [
+                          const Text(
+                            'KITCHEN SYNC',
+                            maxLines: 1,
+                          ),
+                          const SizedBox(width: 18),
+                          Container(
+                            width: 1,
+                            height: 32,
+                            color: const Color(0xFFDBE5DD),
+                          ),
+                          const SizedBox(width: 18),
+                          Expanded(
+                            child: _StoreIdentityCard(
+                              sessionContext: widget.sessionContext,
+                              appBar: true,
+                            ),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'KITCHEN SYNC',
+                      ),
                 actions: [
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -352,16 +375,7 @@ class _AdaptiveShellState extends State<AdaptiveShell>
                         ),
                         const VerticalDivider(width: 1),
                         Expanded(
-                          child: Column(
-                            children: [
-                              _StoreIdentityCard(
-                                sessionContext: widget.sessionContext,
-                              ),
-                              Expanded(
-                                child: available[safeIndex].page,
-                              ),
-                            ],
-                          ),
+                          child: available[safeIndex].page,
                         ),
                       ],
                     )
@@ -425,10 +439,12 @@ class _ShellDestination {
 class _StoreIdentityCard extends StatelessWidget {
   final LocalSessionContext sessionContext;
   final bool compact;
+  final bool appBar;
 
   const _StoreIdentityCard({
     required this.sessionContext,
     this.compact = false,
+    this.appBar = false,
   });
 
   @override
@@ -452,6 +468,54 @@ class _StoreIdentityCard extends StatelessWidget {
             ),
           ),
         ),
+      );
+    }
+
+    if (appBar) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircleAvatar(
+            radius: 17,
+            backgroundColor: Color(0xFFE8F1EC),
+            child: Icon(
+              Icons.storefront_outlined,
+              size: 19,
+              color: Color(0xFF2E6B4F),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  store.storeName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF183027),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${store.storeCode} • '
+                  '${roleToStorage(profile.role)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF64756B),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       );
     }
 

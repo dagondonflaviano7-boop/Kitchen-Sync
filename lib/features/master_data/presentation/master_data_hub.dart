@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kitchen_sync/data/services/default_master_data_seed_service.dart';
 import 'package:kitchen_sync/data/services/master_data_sync_service.dart';
 import 'package:kitchen_sync/features/master_data/ingredients/presentation/ingredient_screen.dart';
 import 'package:kitchen_sync/features/master_data/products/presentation/product_screen.dart';
@@ -21,7 +22,214 @@ class MasterDataHub extends StatefulWidget {
 class _MasterDataHubState extends State<MasterDataHub> {
   final MasterDataSyncService _syncService = MasterDataSyncService();
 
+  final DefaultMasterDataSeedService _seedService =
+      const DefaultMasterDataSeedService();
+
   bool _syncing = false;
+  bool _seeding = false;
+
+  Future<void> _loadDefaultMasterData() async {
+    if (_seeding || _syncing) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.dataset_outlined,
+            color: Color(0xFFB54708),
+          ),
+          title: const Text(
+            'Load 100 Default Records?',
+          ),
+          content: const Text(
+            'This will create development Master Data: '
+            '10 Units of Measure, 10 Suppliers, '
+            '40 Ingredients, 15 Recipes, and '
+            '25 Products.\n\n'
+            'Existing records will not be deleted or '
+            'replaced. Existing matching seed records '
+            'will be skipped.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              icon: const Icon(
+                Icons.download_for_offline_outlined,
+              ),
+              label: const Text(
+                'Load Records',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _seeding = true;
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Creating default Master Data...',
+                ),
+              ),
+            ],
+          ),
+          duration: Duration(minutes: 2),
+        ),
+      );
+
+    try {
+      final DefaultMasterDataSeedResult result = await _seedService.seed(
+        currentUserId: widget.currentUserId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      final String message = result.errors == 0
+          ? 'Default Master Data completed. '
+              '${result.createdTotal} created and '
+              '${result.skippedTotal} skipped.'
+          : 'Default Master Data completed with '
+              '${result.errors} error(s). '
+              '${result.createdTotal} created and '
+              '${result.skippedTotal} skipped.';
+
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            icon: Icon(
+              result.errors == 0
+                  ? Icons.check_circle_outline
+                  : Icons.warning_amber_rounded,
+              color: result.errors == 0
+                  ? const Color(0xFF2E6B4F)
+                  : const Color(0xFFB54708),
+            ),
+            title: Text(
+              result.errors == 0
+                  ? 'Default Master Data Ready'
+                  : 'Default Master Data Completed',
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(message),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Units: ${result.createdUnits} created, '
+                    '${result.skippedUnits} skipped',
+                  ),
+                  Text(
+                    'Suppliers: '
+                    '${result.createdSuppliers} created, '
+                    '${result.skippedSuppliers} skipped',
+                  ),
+                  Text(
+                    'Ingredients: '
+                    '${result.createdIngredients} created, '
+                    '${result.skippedIngredients} skipped',
+                  ),
+                  Text(
+                    'Recipes: '
+                    '${result.createdRecipes} created, '
+                    '${result.skippedRecipes} skipped',
+                  ),
+                  Text(
+                    'Products: '
+                    '${result.createdProducts} created, '
+                    '${result.skippedProducts} skipped',
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    result.synchronizationRequested
+                        ? 'Firebase synchronization was requested.'
+                        : 'Firebase synchronization was not requested.',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('Done'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Default Master Data creation failed: '
+        '$error\n$stackTrace',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Unable to create default Master Data. '
+              'Existing records remain unchanged.',
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _seeding = false;
+        });
+      }
+    }
+  }
 
   Future<void> _synchronizeMasterData() async {
     if (_syncing || _syncService.isRunning) {
@@ -266,6 +474,23 @@ class _MasterDataHubState extends State<MasterDataHub> {
                                 ),
                               );
                             },
+                          ),
+                          _MasterDataCard(
+                            title: _seeding
+                                ? 'Loading Default Records...'
+                                : 'Load 100 Default Records',
+                            subtitle: _seeding
+                                ? 'Creating safe development '
+                                    'Master Data.'
+                                : 'Create 10 Units, 10 Suppliers, '
+                                    '40 Ingredients, 15 Recipes, '
+                                    'and 25 Products.',
+                            icon: _seeding
+                                ? Icons.hourglass_top
+                                : Icons.dataset_outlined,
+                            color: const Color(0xFFB54708),
+                            enabled: !_seeding && !_syncing,
+                            onTap: _loadDefaultMasterData,
                           ),
                           _MasterDataCard(
                             title: _syncing

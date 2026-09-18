@@ -17,6 +17,8 @@ enum MasterDataAutoSyncReason {
   ingredientStatusChanged,
   ingredientDeleted,
   manual,
+  productSaved,
+  productStatusChanged,
 }
 
 class MasterDataAutoSync {

@@ -3,6 +3,7 @@ import 'package:kitchen_sync/data/repositories/product_repository.dart';
 import 'package:kitchen_sync/data/repositories/recipe_repository.dart';
 import 'package:kitchen_sync/domain/models/product.dart';
 import 'package:kitchen_sync/domain/models/recipe.dart';
+import 'package:kitchen_sync/data/services/master_data_auto_sync.dart';
 
 class ProductFormScreen extends StatefulWidget {
   final Product? product;
@@ -389,6 +390,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
       await _productRepository.saveProduct(
         product,
+      );
+
+      await MasterDataAutoSync.instance.trigger(
+        reason: MasterDataAutoSyncReason.productSaved,
       );
 
       if (!mounted) {
