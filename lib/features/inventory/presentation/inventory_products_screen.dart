@@ -714,21 +714,82 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
     List<InventoryProductView> items,
     InventoryProductsLayoutMode mode,
   ) {
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: items.length,
-      itemBuilder: (
-        BuildContext context,
-        int index,
-      ) {
-        final InventoryProductView item = items[index];
+    return Column(
+      children: [
+        Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+          ),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF3F4F6),
+            border: Border(
+              bottom: BorderSide(
+                color: Color(0xFFE5E7EB),
+              ),
+            ),
+          ),
+          child: const Row(
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text(
+                  'SKU',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'PRODUCT NAME',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 110,
+                child: Text(
+                  'PRICE',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  'SOH',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 24),
+            itemCount: items.length,
+            itemBuilder: (
+              BuildContext context,
+              int index,
+            ) {
+              final InventoryProductView item = items[index];
 
-        if (mode == InventoryProductsLayoutMode.tablet) {
-          return _buildTabletProductCard(item);
-        }
+              if (mode == InventoryProductsLayoutMode.tablet) {
+                return _buildTabletProductCard(item);
+              }
 
-        return _buildPhoneProductCard(item);
-      },
+              return _buildPhoneProductCard(item);
+            },
+          ),
+        ),
+      ],
     );
   }
 
