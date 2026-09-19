@@ -614,34 +614,37 @@ class _ProductScreenState extends State<ProductScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            SegmentedButton<ProductStatusFilter>(
-              showSelectedIcon: false,
-              segments: const <ButtonSegment<ProductStatusFilter>>[
-                ButtonSegment<ProductStatusFilter>(
-                  value: ProductStatusFilter.all,
-                  label: Text('All'),
-                ),
-                ButtonSegment<ProductStatusFilter>(
-                  value: ProductStatusFilter.active,
-                  label: Text('Active'),
-                ),
-                ButtonSegment<ProductStatusFilter>(
-                  value: ProductStatusFilter.inactive,
-                  label: Text('Inactive'),
-                ),
-              ],
-              selected: <ProductStatusFilter>{
-                _statusFilter,
-              },
-              onSelectionChanged: (
-                Set<ProductStatusFilter> selection,
-              ) {
-                setState(() {
-                  _statusFilter = selection.first;
-                });
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<ProductStatusFilter>(
+                showSelectedIcon: false,
+                segments: const <ButtonSegment<ProductStatusFilter>>[
+                  ButtonSegment<ProductStatusFilter>(
+                    value: ProductStatusFilter.all,
+                    label: Text('All'),
+                  ),
+                  ButtonSegment<ProductStatusFilter>(
+                    value: ProductStatusFilter.active,
+                    label: Text('Active'),
+                  ),
+                  ButtonSegment<ProductStatusFilter>(
+                    value: ProductStatusFilter.inactive,
+                    label: Text('Inactive'),
+                  ),
+                ],
+                selected: <ProductStatusFilter>{
+                  _statusFilter,
+                },
+                onSelectionChanged: (
+                  Set<ProductStatusFilter> selection,
+                ) {
+                  setState(() {
+                    _statusFilter = selection.first;
+                  });
 
-                _applyFilters();
-              },
+                  _applyFilters();
+                },
+              ),
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<ProductInventoryMode?>(
