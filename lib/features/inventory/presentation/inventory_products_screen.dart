@@ -717,12 +717,12 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
     return Column(
       children: [
         Container(
-          height: 40,
+          height: 52,
           padding: const EdgeInsets.symmetric(
             horizontal: 12,
           ),
           decoration: const BoxDecoration(
-            color: Color(0xFFF3F4F6),
+            color: Color(0xFFDCE7DF),
             border: Border(
               bottom: BorderSide(
                 color: Color(0xFFE5E7EB),
@@ -736,7 +736,9 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
                 child: Text(
                   'SKU',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF183027),
                   ),
                 ),
               ),
@@ -744,7 +746,9 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
                 child: Text(
                   'PRODUCT NAME',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF183027),
                   ),
                 ),
               ),
@@ -754,7 +758,9 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
                   'PRICE',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF183027),
                   ),
                 ),
               ),
@@ -764,7 +770,9 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
                   'SOH',
                   textAlign: TextAlign.right,
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF183027),
                   ),
                 ),
               ),
