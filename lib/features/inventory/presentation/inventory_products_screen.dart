@@ -646,165 +646,59 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
     );
   }
 
-  Widget _buildMetricTile({
-    required String label,
-    required String value,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 10,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F8F6),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFFE1E9E3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: const Color(0xFF2E6B4F),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF64756B),
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Color(0xFF183027),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildTabletProductCard(
     InventoryProductView item,
   ) {
     final Product product = item.product;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 4),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(
-          color: Color(0xFFDBE5DD),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ProductThumbnail(
-                  imageUrl: item.product.imageUrl,
-                  productName: product.productName,
-                  size: 88,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              product.productName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF183027),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _statusBadge(
-                            item.stockStatus,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '${product.sku}'
-                        '${product.barcode == null ? '' : ' • ${product.barcode}'}',
-                        style: const TextStyle(
-                          color: Color(0xFF64756B),
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Chip(
-                        avatar: const Icon(
-                          Icons.tune,
-                          size: 16,
-                        ),
-                        label: Text(
-                          _modeLabel(
-                            product.inventoryMode,
-                          ),
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
+      child: SizedBox(
+        height: 48,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 120,
+                child: Text(
+                  product.sku,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.15,
-              children: [
-                _buildMetricTile(
-                  label: 'On Hand',
-                  value: item.quantity.toStringAsFixed(2),
-                  icon: Icons.inventory_2_outlined,
+              ),
+              Expanded(
+                child: Text(
+                  product.productName,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                _buildMetricTile(
-                  label: 'Average Cost',
-                  value: '₱${item.averageCost.toStringAsFixed(2)}',
-                  icon: Icons.payments_outlined,
+              ),
+              SizedBox(
+                width: 110,
+                child: Text(
+                  '₱${product.retailPrice.toStringAsFixed(2)}',
+                  textAlign: TextAlign.right,
                 ),
-                _buildMetricTile(
-                  label: 'Retail Price',
-                  value: '₱${item.product.retailPrice.toStringAsFixed(2)}',
-                  icon: Icons.sell_outlined,
+              ),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  item.quantity.toStringAsFixed(0),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -813,71 +707,7 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
   Widget _buildPhoneProductCard(
     InventoryProductView item,
   ) {
-    final Product product = item.product;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ProductThumbnail(
-              imageUrl: item.product.imageUrl,
-              productName: product.productName,
-              size: 76,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.productName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${product.sku}'
-                    '${product.barcode == null ? '' : ' • ${product.barcode}'}',
-                    style: const TextStyle(
-                      color: Color(0xFF64756B),
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Mode: ${_modeLabel(product.inventoryMode)}',
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'On Hand: ${item.quantity.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Average Cost: '
-                    '₱${item.averageCost.toStringAsFixed(2)}',
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Retail: '
-                    '₱${item.product.retailPrice.toStringAsFixed(2)}',
-                  ),
-                  const SizedBox(height: 10),
-                  _statusBadge(item.stockStatus),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return _buildTabletProductCard(item);
   }
 
   Widget _buildProductCards(
