@@ -890,14 +890,10 @@ class _InventoryProductsScreenState extends State<InventoryProductsScreen> {
                                     : 'No Inventory Products found.',
                               ),
                             )
-                          : mode == InventoryProductsLayoutMode.desktop
-                              ? _buildWideTable(
-                                  filtered,
-                                )
-                              : _buildProductCards(
-                                  filtered,
-                                  mode,
-                                ),
+                          : _buildProductCards(
+                              filtered,
+                              mode,
+                            ),
                 ),
               ],
             ),
